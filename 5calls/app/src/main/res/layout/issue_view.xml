@@ -20,6 +20,16 @@
         android:paddingBottom="12dp"
         android:gravity="center_vertical">
 
+        <!-- Green dot indicator for content changes -->
+        <View
+            android:id="@+id/content_change_indicator"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/green_dot_indicator"
+            android:visibility="invisible"
+            android:contentDescription="Content changed" />
+
         <!-- Category icon -->
         <FrameLayout
             android:layout_width="48dp"
@@ -79,11 +89,26 @@
                     android:id="@+id/avatars_container"
                     android:layout_width="wrap_content"
                     android:layout_height="32dp"
-                    android:layout_marginEnd="12dp">
+                    android:layout_marginEnd="8dp">
 
                     <!-- Avatars will be added programmatically here -->
 
                 </FrameLayout>
+
+                <!-- Action type tag (Email/Call) -->
+                <TextView
+                    android:id="@+id/action_type_tag"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/action_tag_call_background"
+                    android:textColor="@color/badge_call_text"
+                    android:textSize="11sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="3dp"
+                    android:visibility="gone"
+                    android:contentDescription="Action type" />
 
                 <!-- Actions taken text -->
                 <TextView

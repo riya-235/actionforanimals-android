@@ -11,9 +11,21 @@
 
     <!-- Issue detail screen content -->
     <string name="set_location_header">SET YOUR LOCATION</string>
-    <string name="reps_list_header">REPRESENTATIVES</string>
+    <string name="reps_list_header">Relevant representatives for this policy</string>
     <string name="target_company_header">TARGET COMPANY</string>
     <string name="target_companies_header">TARGET COMPANIES</string>
+    <string name="send_email_button">Send Email</string>
+    <string name="make_call_button">Make Call</string>
+    <string name="targets_header">Targets for this campaign</string>
+    <string name="no_targets_found">No targets found for this campaign.</string>
+    <string name="compose_email_button">Compose Email</string>
+    <string name="contact_method">Contact Method</string>
+    <string name="email_content">Email Content</string>
+    <string name="message_label">Message:</string>
+    <string name="sent_email_button">Sent Email</string>
+    <string name="skip_button">Skip</string>
+    <string name="email_campaign_title">Email Campaign</string>
+    <string name="send_email_chooser">Send Email</string>
 
     <!-- The button for submitting your address or zip code as location [CHAR_LIMIT=30] -->
     <string name="submit">submit</string>
@@ -340,7 +352,7 @@
     <string name="notification_title">Make your voice heard—for the animals.</string>
 
     <!-- Text for a notification reminder to make 5 calls [CHAR_LIMIT=50] -->
-    <string name="notification_text">Spend 1 minute to contact your representatives.</string>
+    <string name="notification_text">Spend 1 minute to help animals.</string>
 
     <!-- Button to go to the settings activity [CHAR_LIMIT=25] -->
     <string name="go_to_settings">Go to settings</string>

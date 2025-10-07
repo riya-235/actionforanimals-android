@@ -286,7 +286,7 @@
     <string name="notification_title">Haz que se oiga tu voz</string>
 
     <!-- Text for a notification reminder to make 5 calls [CHAR_LIMIT=50]-->
-    <string name="notification_text">Dedica 1 minuto para contactar a tus representantes.</string>
+    <string name="notification_text">Dedica 1 minuto para ayudar a los animales.</string>
 
     <!-- Button to go to the settings activity [CHAR_LIMIT=25] -->
     <string name="go_to_settings">Ve a configuración</string>
@@ -353,6 +353,7 @@
 
     <!-- Header for the representatives / contacts list [CHAR_LIMIT=100] -->
     <string name="rep_section_prompt">Contactos para llamar hoy</string>
+    <string name="reps_list_header">Representantes relevantes para esta política</string>
 
     <!-- Warning that you may be in a split district [CHAR_LIMIT=90] -->
     <string name="split_district_warning">Su código postal tiene varios representantes. Esta es nuestra mejor suposición.</string>
@@ -556,5 +557,19 @@
 
     <!-- Settings item for reminders [CHAR_LIMIT=30] -->
     <string name="settings_reminders">Recordatorios</string>
+    
+    <!-- Corporate Campaign Strings -->
+    <string name="send_email_button">Enviar Correo</string>
+    <string name="make_call_button">Hacer Llamada</string>
+    <string name="targets_header">Objetivos para esta campaña</string>
+    <string name="no_targets_found">No se encontraron objetivos para esta campaña.</string>
+    <string name="compose_email_button">Redactar Correo</string>
+    <string name="contact_method">Método de Contacto</string>
+    <string name="email_content">Contenido del Correo</string>
+    <string name="message_label">Mensaje:</string>
+    <string name="sent_email_button">Correo Enviado</string>
+    <string name="skip_button">Omitir</string>
+    <string name="email_campaign_title">Campaña de Correo</string>
+    <string name="send_email_chooser">Enviar Correo</string>
 
 </resources>

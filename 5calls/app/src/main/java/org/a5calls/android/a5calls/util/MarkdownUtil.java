@@ -3,6 +3,7 @@ package org.a5calls.android.a5calls.util;
 import android.content.Context;
 import android.text.style.StrikethroughSpan;
 import android.widget.TextView;
+import androidx.core.content.ContextCompat;
 
 import androidx.annotation.NonNull;
 import io.noties.markwon.Markwon;
@@ -11,6 +12,7 @@ import io.noties.markwon.RenderProps;
 import io.noties.markwon.SpanFactory;
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin;
 import io.noties.markwon.simple.ext.SimpleExtPlugin;
+import org.a5calls.android.a5calls.R;
 
 public class MarkdownUtil {
     /**
@@ -32,5 +34,9 @@ public class MarkdownUtil {
                         })))
                 .build();
         markwon.setMarkdown(view, text);
+        
+        // Set link color to match iOS app
+        int linkColor = ContextCompat.getColor(context, R.color.link_color);
+        view.setLinkTextColor(linkColor);
     }
 }

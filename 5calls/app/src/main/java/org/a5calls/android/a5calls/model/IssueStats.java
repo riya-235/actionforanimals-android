@@ -6,6 +6,10 @@ import android.os.Parcelable;
 public class IssueStats implements Parcelable {
     public int total_actions;
 
+    public IssueStats() {
+        // Default constructor
+    }
+
     protected IssueStats(Parcel in) {
         total_actions = in.readInt();
     }

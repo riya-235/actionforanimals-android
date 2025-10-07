@@ -41,14 +41,10 @@ public class FiveCallsApi {
     // request on the server. This will only work on debug builds.
     protected static final boolean TESTING = true;
 
-    //private static final String GET_ISSUES_REQUEST = "https://api.5calls.org/v1/issues";
     private static final String GET_ISSUES_REQUEST = "https://getissues-wv7gpk3bya-uc.a.run.app";
 
-
-    // private static final String GET_CONTACTS_REQUEST = "https://api.5calls.org/v1/reps?location=";
     private static final String GET_CONTACTS_REQUEST = "https://getcontacts-wv7gpk3bya-uc.a.run.app?location=";
 
-    // private static final String GET_REPORT = "https://api.5calls.org/v1/report";
     private static final String GET_REPORT = "https://reportcall-wv7gpk3bya-uc.a.run.app";
 
     // private static final String NEWSLETTER_SUBSCRIBE = "https://buttondown.com/api/emails/embed-subscribe/5calls";
@@ -62,6 +58,11 @@ public class FiveCallsApi {
         void onReportReceived(int count, boolean donateOn);
 
         void onCallReported();
+
+        // Default implementation for issue count updates - can be overridden
+        default void onIssueCountUpdated(String issueId, int updatedCount) {
+            // Default: do nothing
+        }
     }
 
     public interface IssuesRequestListener {
@@ -87,11 +88,13 @@ public class FiveCallsApi {
         void onError();
     }
 
+
     private RequestQueue mRequestQueue;
     private Gson mGson;
     private List<CallRequestListener> mCallRequestListeners = new ArrayList<>();
     private List<IssuesRequestListener> mIssuesRequestListeners = new ArrayList<>();
     private List<ContactsRequestListener> mContactsRequestListeners = new ArrayList<>();
+
 
     private final String mCallerId;
 
@@ -144,6 +147,7 @@ public class FiveCallsApi {
     public void getContacts(String address) {
         buildContactsRequest(GET_CONTACTS_REQUEST + URLEncoder.encode(address), mContactsRequestListeners);
     }
+
 
     private void buildIssuesRequest(String url, final List<IssuesRequestListener> listeners) {
         // Request a JSON Object response from the provided URL.
@@ -284,6 +288,21 @@ public class FiveCallsApi {
                 new Response.Listener<String>() {
                     @Override
                     public void onResponse(String response) {
+                        Log.d(TAG, "reportCall response: " + response);
+
+                        try {
+                            JSONObject jsonResponse = new JSONObject(response);
+                            int issueCount = jsonResponse.getInt("issueCount");
+                            Log.d(TAG, "Parsed issueCount: " + issueCount + " for issue: " + issueId);
+
+                            // Directly update the issue data in all listeners
+                            for (CallRequestListener listener : mCallRequestListeners) {
+                                listener.onIssueCountUpdated(issueId, issueCount);
+                            }
+                        } catch (JSONException e) {
+                            Log.e(TAG, "Failed to parse reportCall response JSON", e);
+                        }
+
                         for (CallRequestListener listener : mCallRequestListeners) {
                             listener.onCallReported();
                         }

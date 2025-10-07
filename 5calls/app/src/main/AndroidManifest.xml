@@ -77,6 +77,18 @@
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".controller.MainActivity" />
         </activity>
+        <activity android:name=".controller.EmailComposerActivity"
+            android:parentActivityName=".controller.IssueActivity">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".controller.IssueActivity" />
+        </activity>
+        <activity android:name=".controller.CorporateCallActivity"
+            android:parentActivityName=".controller.IssueActivity">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".controller.IssueActivity" />
+        </activity>
 
         <receiver
             android:name=".controller.NotifyBroadcastReceiver" />

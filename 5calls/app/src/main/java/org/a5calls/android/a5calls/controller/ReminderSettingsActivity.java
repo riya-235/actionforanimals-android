@@ -110,12 +110,19 @@ public class ReminderSettingsActivity extends AppCompatActivity {
 
     @Override
     public void finish() {
+        // Schedule reminders before finishing
+        AccountManager accountManager = AccountManager.Instance;
+        SettingsActivity.turnOnReminders(this, accountManager);
+        
         super.finish();
         // Apply slide-out animation from top to bottom when closing
         overridePendingTransition(0, R.anim.slide_out_bottom);
     }
     
     private void initializeCustomViews() {
+        // Load saved values first
+        loadSavedSettings();
+        
         // Set up time picker
         TextView timeDisplay = findViewById(R.id.time_display);
         if (timeDisplay != null) {
@@ -129,18 +136,96 @@ public class ReminderSettingsActivity extends AppCompatActivity {
         setupReminderSwitch();
     }
     
+    private void loadSavedSettings() {
+        AccountManager accountManager = AccountManager.Instance;
+        
+        // Load reminder enabled state
+        boolean isEnabled = accountManager.getAllowReminders(this);
+        android.widget.Switch reminderSwitch = findViewById(R.id.reminder_switch);
+        if (reminderSwitch != null) {
+            reminderSwitch.setChecked(isEnabled);
+        }
+        
+        // Load reminder time
+        int reminderMinutes = accountManager.getReminderMinutes(this);
+        if (reminderMinutes == 0) {
+            reminderMinutes = 19 * 60; // Default to 7:00 PM
+            accountManager.setReminderMinutes(this, reminderMinutes);
+        }
+        
+        int hour = reminderMinutes / 60;
+        int minute = reminderMinutes % 60;
+        String timeString = formatTime(hour, minute);
+        TextView timeDisplay = findViewById(R.id.time_display);
+        if (timeDisplay != null) {
+            timeDisplay.setText(timeString);
+        }
+        
+        // Load reminder days
+        Set<String> savedDays = accountManager.getReminderDays(this);
+        // Convert string set to integer set for the UI
+        Set<Integer> selectedDays = new HashSet<>();
+        for (String day : savedDays) {
+            try {
+                selectedDays.add(Integer.parseInt(day));
+            } catch (NumberFormatException e) {
+                // Skip invalid day values
+            }
+        }
+        
+        // Update UI state
+        updateReminderStatus(isEnabled);
+    }
+    
+    private void updateReminderStatus(boolean isEnabled) {
+        TextView reminderStatus = findViewById(R.id.reminder_status);
+        if (reminderStatus != null) {
+            reminderStatus.setText(isEnabled ? "Active" : "Disabled");
+        }
+        
+        TextView timeDisplay = findViewById(R.id.time_display);
+        if (timeDisplay != null) {
+            timeDisplay.setEnabled(isEnabled);
+            timeDisplay.setAlpha(isEnabled ? 1.0f : 0.5f);
+        }
+        
+        LinearLayout daysContainer = findViewById(R.id.days_container);
+        if (daysContainer != null) {
+            daysContainer.setEnabled(isEnabled);
+            daysContainer.setAlpha(isEnabled ? 1.0f : 0.5f);
+            
+            // Enable/disable all day buttons
+            for (int i = 0; i < daysContainer.getChildCount(); i++) {
+                daysContainer.getChildAt(i).setEnabled(isEnabled);
+            }
+        }
+        
+        updatePreview();
+    }
+    
     private void showTimePicker() {
-        Calendar calendar = Calendar.getInstance();
-        int hour = calendar.get(Calendar.HOUR_OF_DAY);
-        int minute = calendar.get(Calendar.MINUTE);
+        // Load current saved time
+        AccountManager accountManager = AccountManager.Instance;
+        int currentMinutes = accountManager.getReminderMinutes(this);
+        int hour = currentMinutes / 60;
+        int minute = currentMinutes % 60;
         
         TimePickerDialog timePickerDialog = new TimePickerDialog(this,
                 (view, hourOfDay, minuteOfHour) -> {
+                    // Save the new time
+                    int reminderMinutes = hourOfDay * 60 + minuteOfHour;
+                    accountManager.setReminderMinutes(this, reminderMinutes);
+                    
+                    // Update UI
                     String timeString = formatTime(hourOfDay, minuteOfHour);
                     TextView timeDisplay = findViewById(R.id.time_display);
                     if (timeDisplay != null) {
                         timeDisplay.setText(timeString);
                     }
+                    
+                    // Schedule reminders immediately when time changes
+                    SettingsActivity.turnOnReminders(this, accountManager);
+                    
                     updatePreview();
                 }, hour, minute, DateFormat.is24HourFormat(this));
         
@@ -161,12 +246,32 @@ public class ReminderSettingsActivity extends AppCompatActivity {
         String[] days = {"S", "M", "T", "W", "T", "F", "S"};
         String[] dayNames = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
         
+        // Load saved days
+        AccountManager accountManager = AccountManager.Instance;
+        Set<String> savedDays = accountManager.getReminderDays(this);
         Set<Integer> selectedDays = new HashSet<>();
-        selectedDays.add(1); // Monday
-        selectedDays.add(2); // Tuesday
-        selectedDays.add(3); // Wednesday
-        selectedDays.add(4); // Thursday
-        selectedDays.add(5); // Friday
+        for (String day : savedDays) {
+            try {
+                selectedDays.add(Integer.parseInt(day));
+            } catch (NumberFormatException e) {
+                // Skip invalid day values
+            }
+        }
+        
+        // If no days are saved, default to weekdays
+        if (selectedDays.isEmpty()) {
+            selectedDays.add(1); // Monday
+            selectedDays.add(2); // Tuesday
+            selectedDays.add(3); // Wednesday
+            selectedDays.add(4); // Thursday
+            selectedDays.add(5); // Friday
+            // Save the default
+            Set<String> defaultDays = new HashSet<>();
+            for (int day : selectedDays) {
+                defaultDays.add(String.valueOf(day));
+            }
+            accountManager.setReminderDays(this, defaultDays);
+        }
         
         for (int i = 0; i < days.length; i++) {
             TextView dayButton = new TextView(this);
@@ -181,7 +286,7 @@ public class ReminderSettingsActivity extends AppCompatActivity {
             final boolean isSelected = selectedDays.contains(i);
             updateDayButton(dayButton, isSelected);
             
-            dayButton.setOnClickListener(v -> {
+                dayButton.setOnClickListener(v -> {
                 if (selectedDays.contains(dayIndex)) {
                     selectedDays.remove(dayIndex);
                 } else {
@@ -189,6 +294,17 @@ public class ReminderSettingsActivity extends AppCompatActivity {
                 }
                 updateDayButton(dayButton, selectedDays.contains(dayIndex));
                 updateDaysSummary(selectedDays);
+                
+                // Save the updated days
+                Set<String> daysToSave = new HashSet<>();
+                for (int day : selectedDays) {
+                    daysToSave.add(String.valueOf(day));
+                }
+                accountManager.setReminderDays(this, daysToSave);
+                
+                // Schedule reminders immediately when days change
+                SettingsActivity.turnOnReminders(this, accountManager);
+                
                 updatePreview();
             });
             
@@ -230,46 +346,19 @@ public class ReminderSettingsActivity extends AppCompatActivity {
     
     private void setupReminderSwitch() {
         android.widget.Switch reminderSwitch = findViewById(R.id.reminder_switch);
-        TextView reminderStatus = findViewById(R.id.reminder_status);
-        TextView timeDisplay = findViewById(R.id.time_display);
-        LinearLayout daysContainer = findViewById(R.id.days_container);
-        TextView daysSummary = findViewById(R.id.days_summary);
         
         if (reminderSwitch != null) {
             reminderSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                // Update status text
-                if (reminderStatus != null) {
-                    reminderStatus.setText(isChecked ? "Active" : "Disabled");
-                }
+                // Save the reminder state
+                AccountManager accountManager = AccountManager.Instance;
+                accountManager.setAllowReminders(this, isChecked);
                 
-                // Enable/disable time selection
-                if (timeDisplay != null) {
-                    timeDisplay.setEnabled(isChecked);
-                    timeDisplay.setAlpha(isChecked ? 1.0f : 0.5f);
-                }
+                // Update UI
+                updateReminderStatus(isChecked);
                 
-                // Enable/disable day selection
-                if (daysContainer != null) {
-                    daysContainer.setEnabled(isChecked);
-                    daysContainer.setAlpha(isChecked ? 1.0f : 0.5f);
-                    
-                    // Disable all day buttons
-                    for (int i = 0; i < daysContainer.getChildCount(); i++) {
-                        daysContainer.getChildAt(i).setEnabled(isChecked);
-                    }
-                }
-                
-                // Update summary
-                if (daysSummary != null) {
-                    daysSummary.setText(isChecked ? "Weekdays" : "Reminder disabled");
-                }
-                
-                // Update preview
-                updatePreview();
+                // Schedule reminders immediately when toggled
+                SettingsActivity.turnOnReminders(this, accountManager);
             });
-            
-            // Set initial state - start with switch enabled
-            reminderSwitch.setChecked(true);
         }
     }
     
@@ -285,7 +374,11 @@ public class ReminderSettingsActivity extends AppCompatActivity {
         } else {
             TextView timeDisplay = findViewById(R.id.time_display);
             String time = timeDisplay != null ? timeDisplay.getText().toString() : "9:00 AM";
-            previewText.setText("\"Time to check your app!\" at " + time + " on weekdays.");
+            
+            TextView daysSummary = findViewById(R.id.days_summary);
+            String days = daysSummary != null ? daysSummary.getText().toString() : "weekdays";
+            
+            previewText.setText("\"Time to check your app!\" at " + time + " on " + days.toLowerCase() + ".");
         }
     }
 

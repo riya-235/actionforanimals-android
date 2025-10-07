@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.PorterDuff;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,6 +20,9 @@ import org.a5calls.android.a5calls.model.Category;
 import org.a5calls.android.a5calls.model.Contact;
 import org.a5calls.android.a5calls.model.DatabaseHelper;
 import org.a5calls.android.a5calls.model.Issue;
+import org.a5calls.android.a5calls.model.IssueStats;
+import org.a5calls.android.a5calls.model.Target;
+import org.a5calls.android.a5calls.util.ContentChangeManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -122,14 +126,14 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         List<Issue> filteredIssues;
         if (TextUtils.equals(filterText,
                 mActivity.getResources().getString(R.string.all_issues_filter))) {
-            // Include everything, but filter by contact type
-            filteredIssues = filterByContactType(mAllIssues);
+            // Include everything
+            filteredIssues = mAllIssues;
         } else if (TextUtils.equals(filterText,
                 mActivity.getResources().getString(R.string.top_issues_filter))) {
-            filteredIssues = filterByContactType(filterActiveIssues());
+            filteredIssues = filterActiveIssues();
         } else {
-            // Filter by the category string, then by contact type
-            filteredIssues = filterByContactType(filterIssuesByCategory(filterText));
+            // Filter by the category string
+            filteredIssues = filterIssuesByCategory(filterText);
         }
 
         // Then apply search text filter if needed
@@ -160,16 +164,16 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             // No categories selected - show all or apply other filters
             if (TextUtils.equals(filterText,
                     mActivity.getResources().getString(R.string.all_issues_filter))) {
-                filteredIssues = filterByContactType(mAllIssues);
+                filteredIssues = mAllIssues;
             } else if (TextUtils.equals(filterText,
                     mActivity.getResources().getString(R.string.top_issues_filter))) {
-                filteredIssues = filterByContactType(filterActiveIssues());
+                filteredIssues = filterActiveIssues();
             } else {
-                filteredIssues = filterByContactType(mAllIssues);
+                filteredIssues = mAllIssues;
             }
         } else {
             // Filter by selected categories (multi-select)
-            filteredIssues = filterByContactType(filterIssuesByMultipleCategories(selectedCategories));
+            filteredIssues = filterIssuesByMultipleCategories(selectedCategories);
         }
         
         // Then apply search text filter if needed
@@ -246,16 +250,6 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         return tempIssues;
     }
 
-    private ArrayList<Issue> filterByContactType(List<Issue> issues) {
-        ArrayList<Issue> filteredIssues = new ArrayList<>();
-        for (Issue issue : issues) {
-            // Only show issues with contactType "REPS" (congressional representatives)
-            if ("REPS".equals(issue.contactType)) {
-                filteredIssues.add(issue);
-            }
-        }
-        return filteredIssues;
-    }
 
     private ArrayList<Issue> filterIssuesByCategory(String activeCategory) {
         ArrayList<Issue> tempIssues = new ArrayList<>();
@@ -311,6 +305,35 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         }
     }
 
+    public void updateIssueCount(String issueId, int updatedCount) {
+        Log.d("IssuesAdapter", "updateIssueCount called for issue: " + issueId + " with count: " + updatedCount);
+
+        // Update in both mAllIssues and mIssues lists
+        for (Issue issue : mAllIssues) {
+            if (TextUtils.equals(issue.id, issueId)) {
+                if (issue.stats == null) {
+                    issue.stats = new IssueStats();
+                }
+                issue.stats.total_actions = updatedCount;
+                Log.d("IssuesAdapter", "Updated issue " + issueId + " count to " + updatedCount + " in mAllIssues");
+                break;
+            }
+        }
+
+        // Update the filtered list
+        for (int i = 0; i < mIssues.size(); i++) {
+            if (TextUtils.equals(mIssues.get(i).id, issueId)) {
+                Issue issue = mIssues.get(i);
+                if (issue.stats == null) {
+                    issue.stats = new IssueStats();
+                }
+                issue.stats.total_actions = updatedCount;
+                Log.d("IssuesAdapter", "Updated issue " + issueId + " count to " + updatedCount + " in mIssues at position " + i);
+                return;
+            }
+        }
+    }
+
     public boolean hasContacts() {
         return !mContacts.isEmpty();
     }
@@ -347,6 +370,11 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
             // Apply status-based styling like iOS
             applyStatusStyling(issue, vh);
+            
+            // Show/hide content change indicator
+            ContentChangeManager contentChangeManager = new ContentChangeManager(mActivity);
+            boolean hasContentChanged = contentChangeManager.hasIssueChanged(issue.id);
+            vh.contentChangeIndicator.setVisibility(hasContentChanged ? View.VISIBLE : View.INVISIBLE);
 
             vh.itemView.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -613,10 +641,156 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         }
         return true; // All contacts have been called
     }
+    
+    private boolean isBatchEmailCampaign(Issue issue) {
+        // Check if this is a batch email campaign
+        if (issue.actions != null && issue.actions.email != null) {
+            String distributionMethod = issue.actions.email.distributionMethod;
+            // If distributionMethod is null or "batch", it's a batch email
+            return distributionMethod == null || "batch".equals(distributionMethod);
+        }
+        // Default to batch if no email action is defined
+        return true;
+    }
+    
+    private boolean isCorporateCampaignCompleted(Issue issue) {
+        // Check if this corporate campaign has been completed
+        DatabaseHelper dbHelper = AppSingleton.getInstance(mActivity).getDatabaseHelper();
+        
+        if (isBatchEmailCampaign(issue)) {
+            // For batch emails, check if any email action has been taken
+            // Always use the first target's ID and warn if it's not there
+            if (issue.targets == null || issue.targets.isEmpty()) {
+                android.util.Log.w("IssuesAdapter", "Corporate campaign " + issue.id + " has no targets for batch email completion check");
+                return false;
+            }
+            
+            Target firstTarget = issue.targets.get(0);
+            String contactId = firstTarget.id != null ? firstTarget.id : firstTarget.name;
+            
+            if (contactId == null) {
+                android.util.Log.w("IssuesAdapter", "First target in corporate campaign " + issue.id + " has no ID or name");
+                return false;
+            }
+            
+            return dbHelper.hasCalledToday(issue.id, contactId);
+        } else {
+            // For individual emails, check if all targets have been contacted
+            if (issue.targets == null || issue.targets.isEmpty()) {
+                android.util.Log.w("IssuesAdapter", "Corporate campaign " + issue.id + " has no targets for individual email completion check");
+                return false;
+            }
+            
+            for (Target target : issue.targets) {
+                String contactId = target.id != null ? target.id : target.name;
+                if (contactId == null) {
+                    android.util.Log.w("IssuesAdapter", "Target in corporate campaign " + issue.id + " has no ID or name");
+                    return false;
+                }
+                if (!dbHelper.hasCalledToday(issue.id, contactId)) {
+                    return false; // At least one target hasn't been contacted
+                }
+            }
+            return true; // All targets have been contacted
+        }
+    }
 
     private void setupContactAvatars(Issue issue, IssueViewHolder vh) {
         vh.avatarsContainer.removeAllViews();
         
+        // Check if this is a corporate campaign
+        boolean isCorporateCampaign = "CORPORATE".equals(issue.contactType);
+        
+        if (isCorporateCampaign) {
+            // For corporate campaigns, show business/person icon based on distribution method
+            setupCorporateAvatars(issue, vh);
+        } else {
+            // For regular campaigns, show representative avatars
+            setupRepresentativeAvatars(issue, vh);
+        }
+        
+        // Set action type tag based on campaign actions
+        setupActionTypeTag(issue, vh);
+    }
+    
+    private void setupCorporateAvatars(Issue issue, IssueViewHolder vh) {
+        if (issue.targets == null || issue.targets.isEmpty()) {
+            vh.avatarsContainer.setVisibility(View.GONE);
+            return;
+        }
+        
+        vh.avatarsContainer.setVisibility(View.VISIBLE);
+        
+        // Show up to 3 targets with overlapping avatars
+        int maxAvatars = Math.min(3, issue.targets.size());
+        int avatarSize = 32; // dp
+        int overlapOffset = 8; // dp
+        
+        boolean isBatchEmail = isBatchEmailCampaign(issue);
+        
+        for (int i = 0; i < maxAvatars; i++) {
+            Target target = issue.targets.get(i);
+            View avatarView = LayoutInflater.from(mActivity).inflate(R.layout.contact_avatar, vh.avatarsContainer, false);
+            
+            ImageView avatarImage = avatarView.findViewById(R.id.avatar_image);
+            TextView initials = avatarView.findViewById(R.id.avatar_initials);
+            ImageView checkmarkOverlay = avatarView.findViewById(R.id.checkmark_overlay);
+            
+            // Position avatars with overlap (iOS-style)
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                (int) (avatarSize * mActivity.getResources().getDisplayMetrics().density),
+                (int) (avatarSize * mActivity.getResources().getDisplayMetrics().density)
+            );
+            params.leftMargin = (int) (i * (avatarSize - overlapOffset) * mActivity.getResources().getDisplayMetrics().density);
+            avatarView.setLayoutParams(params);
+            
+            // Set z-order so later avatars appear on top
+            avatarView.setTranslationZ(maxAvatars - i);
+            
+            // Check if this target has been completed
+            boolean hasBeenCompleted = false;
+            if (isBatchEmail) {
+                // For batch emails, check if any email action has been taken
+                hasBeenCompleted = isCorporateCampaignCompleted(issue);
+            } else {
+                // For individual emails, check if this specific target has been contacted
+                String contactId = target.id != null ? target.id : target.name;
+                if (contactId != null) {
+                    DatabaseHelper dbHelper = AppSingleton.getInstance(mActivity).getDatabaseHelper();
+                    hasBeenCompleted = dbHelper.hasCalledToday(issue.id, contactId);
+                }
+            }
+            
+            if (hasBeenCompleted) {
+                // Show green checkmark instead of icon
+                avatarImage.setVisibility(View.GONE);
+                initials.setVisibility(View.GONE);
+                checkmarkOverlay.setVisibility(View.VISIBLE);
+            } else {
+                // Show normal avatar (colored circle with no icon)
+                checkmarkOverlay.setVisibility(View.GONE);
+                avatarImage.setVisibility(View.VISIBLE);
+                
+                // Clear any existing image and show just a colored circle
+                avatarImage.setImageDrawable(null);
+                
+                // Generate a consistent color for the circle
+                String targetName = target.name != null ? target.name : "Target";
+                int avatarColor = generateAvatarColor(targetName);
+                avatarImage.setColorFilter(avatarColor, PorterDuff.Mode.SRC_IN);
+            }
+            
+            vh.avatarsContainer.addView(avatarView);
+        }
+        
+        // Update container width to fit all avatars
+        int totalWidth = (int) ((maxAvatars * (avatarSize - overlapOffset) + overlapOffset) * mActivity.getResources().getDisplayMetrics().density);
+        ViewGroup.LayoutParams containerParams = vh.avatarsContainer.getLayoutParams();
+        containerParams.width = totalWidth;
+        vh.avatarsContainer.setLayoutParams(containerParams);
+    }
+    
+    private void setupRepresentativeAvatars(Issue issue, IssueViewHolder vh) {
         if (issue.contacts == null || issue.contacts.isEmpty()) {
             vh.avatarsContainer.setVisibility(View.GONE);
             return;
@@ -692,12 +866,59 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         vh.avatarsContainer.setLayoutParams(containerParams);
     }
     
+    private void setupActionTypeTag(Issue issue, IssueViewHolder vh) {
+        TextView actionTag = vh.itemView.findViewById(R.id.action_type_tag);
+        
+        // Check if this is a corporate campaign
+        boolean isCorporateCampaign = "CORPORATE".equals(issue.contactType);
+        
+        if (isCorporateCampaign) {
+            // For corporate campaigns, check what actions are enabled
+            boolean emailEnabled = issue.actions != null && 
+                                  issue.actions.email != null && 
+                                  issue.actions.email.enabled;
+            boolean callEnabled = issue.actions != null && 
+                                 issue.actions.call != null && 
+                                 issue.actions.call.enabled;
+            
+            if (emailEnabled && callEnabled) {
+                // Both enabled - show "Email" (email takes priority)
+                actionTag.setText("Email");
+                actionTag.setBackgroundResource(R.drawable.action_tag_email_background);
+                actionTag.setTextColor(mActivity.getResources().getColor(R.color.badge_email_text, null));
+                actionTag.setVisibility(View.VISIBLE);
+            } else if (emailEnabled) {
+                // Only email enabled
+                actionTag.setText("Email");
+                actionTag.setBackgroundResource(R.drawable.action_tag_email_background);
+                actionTag.setTextColor(mActivity.getResources().getColor(R.color.badge_email_text, null));
+                actionTag.setVisibility(View.VISIBLE);
+            } else if (callEnabled) {
+                // Only call enabled
+                actionTag.setText("Call");
+                actionTag.setBackgroundResource(R.drawable.action_tag_call_background);
+                actionTag.setTextColor(mActivity.getResources().getColor(R.color.badge_call_text, null));
+                actionTag.setVisibility(View.VISIBLE);
+            } else {
+                // No actions enabled
+                actionTag.setVisibility(View.GONE);
+            }
+        } else {
+            // For representative campaigns, always show "Call"
+            actionTag.setText("Call");
+            actionTag.setBackgroundResource(R.drawable.action_tag_call_background);
+            actionTag.setTextColor(mActivity.getResources().getColor(R.color.badge_call_text, null));
+            actionTag.setVisibility(View.VISIBLE);
+        }
+    }
+    
     private void setupActionCount(Issue issue, IssueViewHolder vh) {
         // Use the total campaign actions from issue stats
         int totalActions = 0;
         if (issue.stats != null) {
             totalActions = issue.stats.total_actions;
         }
+
         
         String actionText;
         if (totalActions == 0) {
@@ -756,6 +977,7 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     public TextView actionsTaken;
     public ImageView categoryIcon;
     public ImageView categoryCheckmark;
+    public View contentChangeIndicator;
 
     public IssueViewHolder(View itemView) {
         super(itemView);
@@ -766,6 +988,7 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         actionsTaken = (TextView) itemView.findViewById(R.id.actions_taken);
         categoryIcon = (ImageView) itemView.findViewById(R.id.category_icon);
         categoryCheckmark = (ImageView) itemView.findViewById(R.id.category_checkmark);
+        contentChangeIndicator = itemView.findViewById(R.id.content_change_indicator);
     }
 }
 

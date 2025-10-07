@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 
@@ -19,6 +20,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.GridLayoutManager;
 
 import android.text.TextUtils;
+import android.text.method.LinkMovementMethod;
 import android.text.util.Linkify;
 import android.util.DisplayMetrics;
 import android.util.Patterns;
@@ -149,6 +151,7 @@ public class RepCallActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
+        super.onBackPressed();
         returnToIssue();
     }
 
@@ -353,6 +356,7 @@ public class RepCallActivity extends AppCompatActivity {
                 AccountManager.Instance.getUserName(this)
         );
         MarkdownUtil.setUpScript(binding.callScript, script, getApplicationContext());
+        binding.callScript.setMovementMethod(LinkMovementMethod.getInstance());
         binding.callScript.setTextSize(AccountManager.Instance.getScriptTextSize(getApplicationContext()));
     }
 

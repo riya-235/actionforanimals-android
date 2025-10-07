@@ -28,6 +28,10 @@ public class Issue implements Parcelable {
     public Category[] categories;
     public boolean isSplit;
     public IssueStats stats;
+    
+    // Corporate campaign support
+    public List<Target> targets;
+    public CorporateInfo corporateInfo;
 
     protected Issue(Parcel in) {
         id = in.readString();
@@ -46,6 +50,8 @@ public class Issue implements Parcelable {
         outcomeModels = in.createTypedArrayList(Outcome.CREATOR);
         categories = in.createTypedArray(Category.CREATOR);
         stats = IssueStats.CREATOR.createFromParcel(in);
+        targets = in.createTypedArrayList(Target.CREATOR);
+        corporateInfo = in.readParcelable(CorporateInfo.class.getClassLoader());
     }
 
     public static final Creator<Issue> CREATOR = new Creator<Issue>() {
@@ -83,6 +89,8 @@ public class Issue implements Parcelable {
         dest.writeTypedList(outcomeModels);
         dest.writeTypedArray(categories, PARCELABLE_WRITE_RETURN_VALUE);
         stats.writeToParcel(dest, flags);
+        dest.writeTypedList(targets);
+        dest.writeParcelable(corporateInfo, flags);
     }
 
     /**

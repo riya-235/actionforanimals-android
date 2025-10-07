@@ -15,6 +15,10 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.DialogFragment;
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleObserver;
+import androidx.lifecycle.OnLifecycleEvent;
+import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.core.view.GravityCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import androidx.appcompat.app.AppCompatActivity;
@@ -25,8 +29,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.util.Patterns;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -56,6 +60,7 @@ import org.a5calls.android.a5calls.net.FiveCallsApi;
 import org.a5calls.android.a5calls.model.Issue;
 import org.a5calls.android.a5calls.util.AnalyticsManager;
 import org.a5calls.android.a5calls.util.CustomTabsUtil;
+import org.a5calls.android.a5calls.util.ContentChangeManager;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -93,6 +98,7 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
     private boolean mShowLowAccuracyWarning = true;
     private boolean mDonateIsOn = false;
     private FirebaseAuth mAuth = null;
+    private boolean wasInBackground = true; // Start as true so first launch refreshes from server
 
     private ActivityMainBinding binding;
     private LocationBottomSheetFragment currentLocationBottomSheet;
@@ -207,6 +213,9 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
         mIssuesAdapter = new IssuesAdapter(this, this);
         binding.issuesRecyclerView.setAdapter(mIssuesAdapter);
 
+        // Setup app lifecycle observer for true backgrounding detection
+        setupAppLifecycleObserver();
+
         // Setup always-visible search functionality
         if (savedInstanceState != null) {
             mSearchText = savedInstanceState.getString(KEY_SEARCH_TEXT);
@@ -278,6 +287,8 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
         super.onDestroy();
     }
 
+    // onStop removed - using ProcessLifecycleOwner instead for true backgrounding detection
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -308,16 +319,29 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
             binding.newsletterSignupView.setVisibility(View.GONE);
         }
 
-        // Refresh on resume. The post is necessary to start the spinner animation.
-        // Note that refreshing issues will also refresh the contacts list when it runs
-        // on resume.
-        binding.swipeContainer.post(new Runnable() {
-            @Override
-            public void run() {
-                binding.swipeContainer.setRefreshing(true);
-                refreshIssues();
-            }
-        });
+        // Only refresh from server if app was actually backgrounded OR if we have no data
+        int itemCount = mIssuesAdapter.getItemCount();
+        Log.d("MainActivity", "onResume - wasInBackground: " + wasInBackground + ", itemCount: " + itemCount);
+
+        if (wasInBackground || itemCount == 0) {
+            // Refresh from server when returning from background or on first load
+            Log.d("MainActivity", "DECISION: Refreshing from SERVER (wasInBackground=" + wasInBackground + ", itemCount=" + itemCount + ")");
+            binding.swipeContainer.post(new Runnable() {
+                @Override
+                public void run() {
+                    binding.swipeContainer.setRefreshing(true);
+                    refreshIssues();
+                }
+            });
+            wasInBackground = false;
+            Log.d("MainActivity", "wasInBackground reset to false");
+        } else {
+            // Just refresh UI (green dots, filters) when navigating between screens
+            Log.d("MainActivity", "DECISION: UI-only refresh (wasInBackground=" + wasInBackground + ", itemCount=" + itemCount + ")");
+            refreshUIOnly();
+        }
+
+        // No need to reset flags - ProcessLifecycleOwner handles backgrounding detection
 
         // Check if location needs to be set and show bottom sheet if needed
         if (!accountManager.hasLocation(this)) {
@@ -425,6 +449,10 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
 
             @Override
             public void onIssuesReceived(List<Issue> issues) {
+                // Check for content changes and update changed issue IDs
+                ContentChangeManager contentChangeManager = new ContentChangeManager(MainActivity.this);
+                contentChangeManager.updateChangedIssues(issues);
+                
                 mIssuesAdapter.setAllIssues(issues, IssuesAdapter.NO_ERROR);
                 mIssuesAdapter.setFilterAndSearch(getString(R.string.all_issues_filter), mSearchText); // Show all issues by default
                 binding.swipeContainer.setRefreshing(false);
@@ -531,6 +559,13 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
             @Override
             public void onCallReported() {
             }
+
+            @Override
+            public void onIssueCountUpdated(String issueId, int updatedCount) {
+                if (mIssuesAdapter != null) {
+                    mIssuesAdapter.updateIssueCount(issueId, updatedCount);
+                }
+            }
         };
 
         FiveCallsApi api = AppSingleton.getInstance(getApplicationContext()).getJsonController();
@@ -580,6 +615,30 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
             }
         }
         api.getIssues();
+    }
+
+    /**
+     * Refresh the UI without hitting the server - updates green dots, filters, etc.
+     */
+    private void refreshUIOnly() {
+        Log.d("MainActivity", "refreshUIOnly called");
+        if (mIssuesAdapter != null) {
+            // Re-apply current filters and search to refresh green dot indicators
+            applyFilters();
+
+            // Update location header in case it changed
+            updateLocationHeader();
+            Log.d("MainActivity", "refreshUIOnly completed - applied filters and updated header");
+        } else {
+            Log.d("MainActivity", "refreshUIOnly - mIssuesAdapter is null!");
+        }
+    }
+
+    private void updateIssueCount(String issueId, int updatedCount) {
+        Log.d("MainActivity", "updateIssueCount called for issue: " + issueId + " with count: " + updatedCount);
+        if (mIssuesAdapter != null) {
+            mIssuesAdapter.updateIssueCount(issueId, updatedCount);
+        }
     }
 
     @Override
@@ -820,5 +879,24 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
         
         // Don't update header here - let server response update it to avoid flicker
         refreshIssues();
+    }
+
+    /**
+     * Setup ProcessLifecycleOwner to detect true app backgrounding vs screen navigation
+     */
+    private void setupAppLifecycleObserver() {
+        ProcessLifecycleOwner.get().getLifecycle().addObserver(new LifecycleObserver() {
+            @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
+            public void onAppBackgrounded() {
+                Log.d("MainActivity", "ProcessLifecycleOwner: App backgrounded - wasInBackground set to true");
+                wasInBackground = true;
+            }
+
+            @OnLifecycleEvent(Lifecycle.Event.ON_START)
+            public void onAppForegrounded() {
+                Log.d("MainActivity", "ProcessLifecycleOwner: App foregrounded");
+                // Don't set wasInBackground = false here, let onResume handle the logic
+            }
+        });
     }
 }

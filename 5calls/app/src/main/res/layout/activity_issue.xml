@@ -32,8 +32,7 @@
             android:textSize="16sp"
             android:textColor="@color/text_primary_modern"
             android:lineSpacingExtra="4dp"
-            android:paddingBottom="16dp"
-            android:autoLink="web" />
+            android:paddingBottom="16dp" />
 
         <!-- Location Setup Section (shown when no location is set for political campaigns) -->
         <LinearLayout

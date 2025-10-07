@@ -18,8 +18,8 @@ public class ScriptReplacements {
     private static final Pattern CONTACT_NAME_PATTERN =
             Pattern.compile("\\[\\s?REP/SEN NAME\\s?]|\\[\\s?SENATOR/REP NAME\\s?]|\\[\\s?SENATOR NAME]|\\[\\s?REPRESENTATIVE NAME\\s?]", Pattern.CASE_INSENSITIVE);
     private static final Pattern LOCATION_PATTERN =
-            Pattern.compile("\\[\\s?CITY[,/]\\s?ZIP\\s?]|\\[\\s?CITY[,/]\\s?STATE\\s?]", Pattern.CASE_INSENSITIVE);
-    private static final Pattern NAME_PATTERN = Pattern.compile("\\[\\s*NAME\\s*]", Pattern.CASE_INSENSITIVE);
+            Pattern.compile("\\[\\s?CITY[,/]\\s?ZIP\\s?]|\\[\\s?CITY[,/]\\s?STATE\\s?]|\\*{2}\\[\\s?CITY[,/]\\s?ZIP\\s?]\\*{2}", Pattern.CASE_INSENSITIVE);
+    private static final Pattern NAME_PATTERN = Pattern.compile("\\[\\s*NAME\\s*]|\\*{2}\\[\\s*NAME\\s*]\\*{2}", Pattern.CASE_INSENSITIVE);
 
     private static final String US_HOUSE = "US House";
     private static final String HOUSE = "House";
@@ -31,11 +31,18 @@ public class ScriptReplacements {
     private static final String ATTORNEY_GENERAL = "AttorneyGeneral";
     private static final String SECRETARY_OF_STATE = "SecretaryOfState";
 
-    public static String replacing(Context context, String script, Contact contact,
+    // Unified method for both call scripts and email templates
+    public static String replacing(Context context, String script, @Nullable Contact contact,
                                    @Nullable String location, @Nullable String userName) {
-        String replacedScript = chooseSubscript(script, contact);
-        replacedScript = replacingContact(context, replacedScript, contact);
+        String replacedScript = script;
+        
+        // Handle contact-specific replacements (only for call scripts)
+        if (contact != null) {
+            replacedScript = chooseSubscript(replacedScript, contact);
+            replacedScript = replacingContact(context, replacedScript, contact);
+        }
 
+        // Handle location and name replacements (for both call scripts and email templates)
         if (!TextUtils.isEmpty(location)) {
             replacedScript = replacingLocation(replacedScript, location);
         }

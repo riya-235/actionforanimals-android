@@ -3,10 +3,13 @@ package org.a5calls.android.a5calls.controller;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.text.method.LinkMovementMethod;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -21,7 +24,9 @@ import org.a5calls.android.a5calls.model.AccountManager;
 import org.a5calls.android.a5calls.model.Contact;
 import org.a5calls.android.a5calls.model.DatabaseHelper;
 import org.a5calls.android.a5calls.model.Issue;
+import org.a5calls.android.a5calls.model.Target;
 import org.a5calls.android.a5calls.util.MarkdownUtil;
+import org.a5calls.android.a5calls.util.ContentChangeManager;
 import org.a5calls.android.a5calls.view.ContactListItemView;
 
 import java.util.ArrayList;
@@ -67,6 +72,10 @@ public class IssueActivity extends AppCompatActivity {
         setupLocationSection();
         setupContactsSection();
         setupActionButtons();
+        
+        // Clear the content change indicator when user views the issue
+        ContentChangeManager contentChangeManager = new ContentChangeManager(this);
+        contentChangeManager.clearIssueChanged(mIssue.id);
 
         // Track analytics
         FiveCallsApplication.analyticsManager().trackPageview("/issue/" + mIssue.slug + "/", this);
@@ -80,7 +89,7 @@ public class IssueActivity extends AppCompatActivity {
         setupContactsSection();
         setupActionButtons();
     }
-
+    
     private void setupActionBar() {
         if (getSupportActionBar() != null) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
@@ -92,6 +101,8 @@ public class IssueActivity extends AppCompatActivity {
         // Set issue title and description
         binding.issueName.setText(mIssue.name);
         MarkdownUtil.setUpScript(binding.issueDescription, mIssue.reason, getApplicationContext());
+        // Enable link clicking for markdown links
+        binding.issueDescription.setMovementMethod(LinkMovementMethod.getInstance());
     }
 
     private void setupLocationSection() {
@@ -107,20 +118,31 @@ public class IssueActivity extends AppCompatActivity {
     }
 
     private void setupContactsSection() {
-        if (!accountManager.hasLocation(this)) {
-            // Hide contacts section when location is not set
-            binding.contactsSection.setVisibility(View.GONE);
-            return;
+        // Check if this is a corporate campaign
+        boolean isCorporateCampaign = "CORPORATE".equals(mIssue.contactType);
+        
+        if (isCorporateCampaign) {
+            // For corporate campaigns, show targets section
+            binding.contactsSection.setVisibility(View.VISIBLE);
+            binding.contactsHeader.setText(getString(R.string.targets_header));
+            populateCorporateTargets();
+        } else {
+            // For political campaigns, require location
+            if (!accountManager.hasLocation(this)) {
+                // Hide contacts section when location is not set
+                binding.contactsSection.setVisibility(View.GONE);
+                return;
+            }
+
+            binding.contactsSection.setVisibility(View.VISIBLE);
+
+            // Set section header - matches iOS contactsSectionHeader logic
+            String headerText = getContactsSectionHeader();
+            binding.contactsHeader.setText(headerText);
+
+            // Populate contacts with proper sectioning
+            populateContacts();
         }
-
-        binding.contactsSection.setVisibility(View.VISIBLE);
-
-        // Set section header - matches iOS contactsSectionHeader logic
-        String headerText = getContactsSectionHeader();
-        binding.contactsHeader.setText(headerText);
-
-        // Populate contacts with proper sectioning
-        populateContacts();
     }
 
     private String getContactsSectionHeader() {
@@ -141,37 +163,32 @@ public class IssueActivity extends AppCompatActivity {
         android.util.Log.d("IssueActivity", "lat = '" + lat + "'");
         android.util.Log.d("IssueActivity", "lng = '" + lng + "'");
 
-        if (!hasLocation) {
-            // Hide action buttons when location is not set
-            binding.actionButtonsSection.setVisibility(View.GONE);
-            android.util.Log.d("IssueActivity", "Hiding action buttons - no location");
-            return;
+        // Check if this is a corporate campaign
+        boolean isCorporateCampaign = "CORPORATE".equals(mIssue.contactType);
+        
+        if (isCorporateCampaign) {
+            // For corporate campaigns, show email/call buttons regardless of location
+            setupCorporateActionButtons();
+        } else {
+            // For political campaigns, require location
+            if (!hasLocation) {
+                // Hide action buttons when location is not set
+                binding.actionButtonsSection.setVisibility(View.GONE);
+                android.util.Log.d("IssueActivity", "Hiding action buttons - no location");
+                return;
+            }
+            setupPoliticalActionButtons();
         }
-
+    }
+    
+    private void setupPoliticalActionButtons() {
         binding.actionButtonsSection.setVisibility(View.VISIBLE);
         android.util.Log.d("IssueActivity", "Showing action buttons - location available");
-
-        // Debug the views
-        android.util.Log.d("IssueActivity", "actionButtonsSection exists: " + (binding.actionButtonsSection != null));
-        android.util.Log.d("IssueActivity", "primaryActionButton exists: " + (binding.primaryActionButton != null));
-
-        if (binding.actionButtonsSection != null) {
-            android.util.Log.d("IssueActivity", "actionButtonsSection visibility: " + binding.actionButtonsSection.getVisibility());
-        }
-
-        if (binding.primaryActionButton != null) {
-            android.util.Log.d("IssueActivity", "primaryActionButton visibility before: " + binding.primaryActionButton.getVisibility());
-        }
 
         // Setup primary action button for calling representatives
         binding.primaryActionButton.setText(R.string.make_calls_button);
         binding.primaryActionButton.setVisibility(View.VISIBLE);
         android.util.Log.d("IssueActivity", "Button text set and visibility set to VISIBLE");
-
-        if (binding.primaryActionButton != null) {
-            android.util.Log.d("IssueActivity", "primaryActionButton visibility after: " + binding.primaryActionButton.getVisibility());
-            android.util.Log.d("IssueActivity", "primaryActionButton text: " + binding.primaryActionButton.getText());
-        }
 
         binding.primaryActionButton.setOnClickListener(v -> {
             // Launch contact detail screen for calling
@@ -179,9 +196,221 @@ public class IssueActivity extends AppCompatActivity {
             launchContactDetail();
         });
 
-        // Hide secondary buttons for now (no corporate campaigns yet)
+        // Hide secondary buttons for political campaigns
         binding.secondaryButtonsContainer.setVisibility(View.GONE);
         android.util.Log.d("IssueActivity", "setupActionButtons completed");
+    }
+    
+    private void setupCorporateActionButtons() {
+        binding.actionButtonsSection.setVisibility(View.VISIBLE);
+        
+        // Check if email is enabled
+        boolean emailEnabled = mIssue.actions != null && 
+                              mIssue.actions.email != null && 
+                              mIssue.actions.email.enabled;
+        
+        // Check if call is enabled  
+        boolean callEnabled = mIssue.actions != null && 
+                             mIssue.actions.call != null && 
+                             mIssue.actions.call.enabled;
+        
+        if (emailEnabled) {
+            // Email campaign - show email button
+            binding.primaryActionButton.setText(getString(R.string.send_email_button));
+            binding.primaryActionButton.setVisibility(View.VISIBLE);
+            binding.primaryActionButton.setOnClickListener(v -> launchEmailComposer());
+            
+            binding.secondaryButtonsContainer.setVisibility(View.GONE);
+        } else if (callEnabled) {
+            // Call campaign - show call button
+            binding.primaryActionButton.setText(getString(R.string.make_calls_button));
+            binding.primaryActionButton.setVisibility(View.VISIBLE);
+            binding.primaryActionButton.setOnClickListener(v -> launchCorporateCall());
+            
+            binding.secondaryButtonsContainer.setVisibility(View.GONE);
+        } else {
+            // No actions enabled
+            binding.actionButtonsSection.setVisibility(View.GONE);
+        }
+    }
+    
+    private void launchEmailComposer() {
+        Intent intent = new Intent(this, EmailComposerActivity.class);
+        intent.putExtra("issue", mIssue);
+        intent.putParcelableArrayListExtra("targets", (ArrayList) mIssue.targets);
+        
+        // Check if this is batch email
+        boolean isBatchEmail = mIssue.actions != null && 
+                              mIssue.actions.email != null && 
+                              "batch".equals(mIssue.actions.email.distributionMethod);
+        intent.putExtra("is_batch_email", isBatchEmail);
+        
+        // Pass location for script replacements (same as RepCallActivity)
+        intent.putExtra(EmailComposerActivity.KEY_LOCATION_NAME, 
+                       getIntent().getStringExtra(RepCallActivity.KEY_LOCATION_NAME));
+        
+        startActivity(intent);
+    }
+    
+    private void launchCorporateCall() {
+        // Always start with the first target
+        launchCorporateCallForTarget(mIssue.targets.get(0), 0);
+    }
+    
+    private void launchCorporateCallForTarget(Target target) {
+        // Find the index of this target
+        int targetIndex = mIssue.targets.indexOf(target);
+        launchCorporateCallForTarget(target, targetIndex);
+    }
+    
+    private void launchCorporateCallForTarget(Target target, int targetIndex) {
+        Intent intent = new Intent(this, CorporateCallActivity.class);
+        intent.putExtra(KEY_ISSUE, mIssue);
+        intent.putExtra(CorporateCallActivity.KEY_ACTIVE_TARGET_INDEX, targetIndex);
+        intent.putExtra(CorporateCallActivity.KEY_ADDRESS, getIntent().getStringExtra(RepCallActivity.KEY_ADDRESS));
+        intent.putExtra(CorporateCallActivity.KEY_LOCATION_NAME, getIntent().getStringExtra(RepCallActivity.KEY_LOCATION_NAME));
+        
+        startActivity(intent);
+    }
+    
+    private void populateCorporateTargets() {
+        LinearLayout contactsContainer = binding.contactsContainer;
+        contactsContainer.removeAllViews();
+        
+        if (mIssue.targets == null || mIssue.targets.isEmpty()) {
+            // Show message when no targets available
+            TextView noTargets = new TextView(this);
+            noTargets.setText(getString(R.string.no_targets_found));
+            noTargets.setPadding(16, 16, 16, 16);
+            contactsContainer.addView(noTargets);
+            return;
+        }
+        
+        // Check if this is batch email
+        boolean isBatchEmail = mIssue.actions != null && 
+                              mIssue.actions.email != null && 
+                              "batch".equals(mIssue.actions.email.distributionMethod);
+        
+        android.util.Log.d("IssueActivity", "isBatchEmail: " + isBatchEmail);
+        if (mIssue.actions != null && mIssue.actions.email != null) {
+            android.util.Log.d("IssueActivity", "distributionMethod: " + mIssue.actions.email.distributionMethod);
+        }
+        
+        if (isBatchEmail) {
+            // Show single company target with batch email button
+            View targetView = getLayoutInflater().inflate(R.layout.corporate_target_item, contactsContainer, false);
+            setupBatchTargetView(targetView);
+            contactsContainer.addView(targetView);
+        } else {
+            // Show individual targets with individual email buttons
+            for (Target target : mIssue.targets) {
+                View targetView = getLayoutInflater().inflate(R.layout.corporate_target_item, contactsContainer, false);
+                setupIndividualTargetView(targetView, target);
+                contactsContainer.addView(targetView);
+            }
+        }
+    }
+    
+    private void setupBatchTargetView(View targetView) {
+        // For batch email, show company info and make entire card clickable
+        ImageView icon = targetView.findViewById(R.id.target_icon);
+        ImageView checkmark = targetView.findViewById(R.id.target_checkmark);
+        TextView name = targetView.findViewById(R.id.target_name);
+        TextView department = targetView.findViewById(R.id.target_department);
+        
+        icon.setImageResource(R.drawable.ic_business);
+        
+        android.util.Log.d("IssueActivity", "setupBatchTargetView - corporateInfo: " + (mIssue.corporateInfo != null));
+        if (mIssue.corporateInfo != null) {
+            android.util.Log.d("IssueActivity", "Company: " + mIssue.corporateInfo.company);
+            name.setText(mIssue.corporateInfo.company);
+            if (mIssue.corporateInfo.industry != null) {
+                department.setText(mIssue.corporateInfo.industry);
+            }
+        } else {
+            android.util.Log.d("IssueActivity", "corporateInfo is null, using fallback");
+            name.setText("Company");
+            department.setText("Corporate Campaign");
+        }
+        
+        // Show checkmark if batch email has been completed
+        boolean hasBeenCompleted = hasBatchTargetBeenCompleted();
+        if (hasBeenCompleted) {
+            checkmark.setVisibility(View.VISIBLE);
+        } else {
+            checkmark.setVisibility(View.GONE);
+        }
+        
+        // Make entire card clickable to launch appropriate action
+        targetView.setOnClickListener(v -> {
+            // Check if email or call is enabled
+            boolean emailEnabled = mIssue.actions != null && 
+                                  mIssue.actions.email != null && 
+                                  mIssue.actions.email.enabled;
+            boolean callEnabled = mIssue.actions != null && 
+                                 mIssue.actions.call != null && 
+                                 mIssue.actions.call.enabled;
+            
+            if (emailEnabled) {
+                // Email campaign - launch email composer
+                launchEmailComposer();
+            } else if (callEnabled) {
+                // Call campaign - launch call for this specific target
+                launchCorporateCallForTarget(mIssue.targets.get(0)); // For batch, use first target
+            }
+        });
+    }
+    
+    private void setupIndividualTargetView(View targetView, Target target) {
+        // For individual email, show target info and make entire card clickable
+        ImageView icon = targetView.findViewById(R.id.target_icon);
+        ImageView checkmark = targetView.findViewById(R.id.target_checkmark);
+        TextView name = targetView.findViewById(R.id.target_name);
+        TextView department = targetView.findViewById(R.id.target_department);
+        
+        icon.setImageResource(R.drawable.ic_person);
+        name.setText(target.name);
+        if (target.department != null) {
+            department.setText(target.department);
+        }
+        
+        // Show checkmark if this individual target has been completed
+        boolean hasBeenCompleted = hasIndividualTargetBeenCompleted(target);
+        if (hasBeenCompleted) {
+            checkmark.setVisibility(View.VISIBLE);
+        } else {
+            checkmark.setVisibility(View.GONE);
+        }
+        
+        // Make entire card clickable to launch appropriate action for this specific target
+        targetView.setOnClickListener(v -> {
+            // Check if email or call is enabled
+            boolean emailEnabled = mIssue.actions != null && 
+                                  mIssue.actions.email != null && 
+                                  mIssue.actions.email.enabled;
+            boolean callEnabled = mIssue.actions != null && 
+                                 mIssue.actions.call != null && 
+                                 mIssue.actions.call.enabled;
+            
+            if (emailEnabled) {
+                // Email campaign - launch email composer for this specific target
+                Intent intent = new Intent(this, EmailComposerActivity.class);
+                intent.putExtra("issue", mIssue);
+                ArrayList<Target> singleTarget = new ArrayList<>();
+                singleTarget.add(target);
+                intent.putParcelableArrayListExtra("targets", singleTarget);
+                intent.putExtra("is_batch_email", false);
+                
+                // Pass location for script replacements (same as RepCallActivity)
+                intent.putExtra(EmailComposerActivity.KEY_LOCATION_NAME, 
+                               getIntent().getStringExtra(RepCallActivity.KEY_LOCATION_NAME));
+                
+                startActivity(intent);
+            } else if (callEnabled) {
+                // Call campaign - launch corporate call for this specific target
+                launchCorporateCallForTarget(target);
+            }
+        });
     }
 
     private void populateContacts() {
@@ -301,6 +530,39 @@ public class IssueActivity extends AppCompatActivity {
         DatabaseHelper dbHelper = AppSingleton.getInstance(this).getDatabaseHelper();
         return dbHelper.hasCalledToday(mIssue.id, contact.id);
     }
+    
+    private boolean hasBatchTargetBeenCompleted() {
+        // For batch emails, check if any email action has been taken
+        // Always use the first target's ID and warn if it's not there
+        if (mIssue.targets == null || mIssue.targets.isEmpty()) {
+            android.util.Log.w("IssueActivity", "Corporate campaign " + mIssue.id + " has no targets for batch email completion check");
+            return false;
+        }
+        
+        Target firstTarget = mIssue.targets.get(0);
+        String contactId = firstTarget.id != null ? firstTarget.id : firstTarget.name;
+        
+        if (contactId == null) {
+            android.util.Log.w("IssueActivity", "First target in corporate campaign " + mIssue.id + " has no ID or name");
+            return false;
+        }
+        
+        DatabaseHelper dbHelper = AppSingleton.getInstance(this).getDatabaseHelper();
+        return dbHelper.hasCalledToday(mIssue.id, contactId);
+    }
+    
+    private boolean hasIndividualTargetBeenCompleted(Target target) {
+        // For individual emails, check if this specific target has been contacted
+        String contactId = target.id != null ? target.id : target.name;
+        
+        if (contactId == null) {
+            android.util.Log.w("IssueActivity", "Target in corporate campaign " + mIssue.id + " has no ID or name");
+            return false;
+        }
+        
+        DatabaseHelper dbHelper = AppSingleton.getInstance(this).getDatabaseHelper();
+        return dbHelper.hasCalledToday(mIssue.id, contactId);
+    }
 
     private void launchContactDetailForContact(Contact contact, int contactIndex) {
         Intent intent = new Intent(this, RepCallActivity.class);
@@ -327,8 +589,8 @@ public class IssueActivity extends AppCompatActivity {
         Intent intent = new Intent(this, RepCallActivity.class);
         intent.putExtra(KEY_ISSUE, mIssue);
         // Pass other required extras from the original activity
-        intent.putExtra("KEY_ADDRESS", getIntent().getStringExtra("KEY_ADDRESS"));
-        intent.putExtra("KEY_LOCATION_NAME", getIntent().getStringExtra("KEY_LOCATION_NAME"));
+        intent.putExtra(RepCallActivity.KEY_ADDRESS, getIntent().getStringExtra(RepCallActivity.KEY_ADDRESS));
+        intent.putExtra(RepCallActivity.KEY_LOCATION_NAME, getIntent().getStringExtra(RepCallActivity.KEY_LOCATION_NAME));
         intent.putExtra(KEY_IS_LOW_ACCURACY, mIsLowAccuracy);
         intent.putExtra(KEY_DONATE_IS_ON, mDonateIsOn);
         startActivity(intent);

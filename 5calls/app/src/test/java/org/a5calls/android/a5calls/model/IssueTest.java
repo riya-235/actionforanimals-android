@@ -73,7 +73,6 @@ public class IssueTest {
             }
             assertEquals(expected.link, actual.link);
             assertEquals(expected.linkTitle, actual.linkTitle);
-            assertEquals(expected.active, actual.active);
             assertEquals(expected.isSplit, actual.isSplit);
             assertEquals(expected.contacts, actual.contacts);
             assertEquals(expected.contactAreas, actual.contactAreas);

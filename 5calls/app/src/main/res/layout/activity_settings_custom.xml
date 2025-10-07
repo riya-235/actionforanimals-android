@@ -184,7 +184,7 @@
                         <ImageView
                             android:layout_width="20dp"
                             android:layout_height="20dp"
-                            android:src="@drawable/ic_settings"
+                            android:src="@drawable/ic_feedback"
                             android:tint="@android:color/white"
                             android:contentDescription="@null" />
                     </LinearLayout>
@@ -262,7 +262,7 @@
                         <ImageView
                             android:layout_width="20dp"
                             android:layout_height="20dp"
-                            android:src="@drawable/ic_settings"
+                            android:src="@drawable/ic_instagram"
                             android:tint="@android:color/white"
                             android:contentDescription="@null" />
                     </LinearLayout>
@@ -314,7 +314,7 @@
                         <ImageView
                             android:layout_width="20dp"
                             android:layout_height="20dp"
-                            android:src="@drawable/ic_settings"
+                            android:src="@drawable/ic_share"
                             android:tint="@android:color/white"
                             android:contentDescription="@null" />
                     </LinearLayout>
@@ -366,7 +366,7 @@
                         <ImageView
                             android:layout_width="20dp"
                             android:layout_height="20dp"
-                            android:src="@drawable/ic_settings"
+                            android:src="@drawable/ic_star"
                             android:tint="@android:color/white"
                             android:contentDescription="@null" />
                     </LinearLayout>
@@ -444,7 +444,7 @@
                         <ImageView
                             android:layout_width="20dp"
                             android:layout_height="20dp"
-                            android:src="@drawable/ic_settings"
+                            android:src="@drawable/ic_info"
                             android:tint="@android:color/white"
                             android:contentDescription="@null" />
                     </LinearLayout>
@@ -496,7 +496,7 @@
                         <ImageView
                             android:layout_width="20dp"
                             android:layout_height="20dp"
-                            android:src="@drawable/ic_settings"
+                            android:src="@drawable/ic_code"
                             android:tint="@android:color/white"
                             android:contentDescription="@null" />
                     </LinearLayout>
