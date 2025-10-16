@@ -56,6 +56,11 @@ public class FiveCallsApiTest {
         public void onCallReported() {
             mCallReported++;
         }
+
+        @Override
+        public void onIssueCountUpdated(String issueId, int updatedCount) {
+            // Test implementation - not used in current tests
+        }
     }
 
     static class TestIssuesListener implements FiveCallsApi.IssuesRequestListener {
@@ -103,11 +108,12 @@ public class FiveCallsApiTest {
         }
 
         @Override
-        public void onContactsReceived(String locationName, boolean isLowAccuracy,
-                                       List<Contact> contacts) {
+        public void onContactsReceived(String locationName, boolean isLowAccuracy, String lowAccuracyMessage,
+                                       List<Contact> contacts, String city, String county, String state) {
             mLocationName = locationName;
             mLowAccuracy = isLowAccuracy;
             mContacts = contacts;
+            // Test implementation - city, county, state not used in current tests
         }
     }
 
@@ -137,7 +143,7 @@ public class FiveCallsApiTest {
         mHttpStack = new MockHttpStack();
         BasicNetwork basicNetwork = new BasicNetwork(mHttpStack);
         mRequestQueue = new FakeRequestQueue(basicNetwork);
-        mApi = new FiveCallsApi("itMe", mRequestQueue);
+        mApi = new FiveCallsApi("itMe", mRequestQueue, androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().getTargetContext());
     }
 
     @After

@@ -5,9 +5,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 
-import com.google.android.material.snackbar.BaseTransientBottomBar;
 import com.google.android.material.navigation.NavigationView;
-import com.google.android.material.snackbar.Snackbar;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultCallback;
@@ -79,7 +77,6 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
     public static final int NOTIFICATION_REQUEST = 2;
     public static final String EXTRA_FROM_NOTIFICATION = "extraFromNotification";
     private static final String KEY_SEARCH_TEXT = "searchText";
-    private static final String KEY_SHOW_LOW_ACCURACY_WARNING = "showLowAccuracyWarning";
     private final AccountManager accountManager = AccountManager.Instance;
 
     // Removed filter functionality
@@ -95,7 +92,6 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
     private String mLongitude;
     private String mLocationName;
     private boolean mIsLowAccuracy = false;
-    private boolean mShowLowAccuracyWarning = true;
     private boolean mDonateIsOn = false;
     private FirebaseAuth mAuth = null;
     private boolean wasInBackground = true; // Start as true so first launch refreshes from server
@@ -103,7 +99,6 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
     private ActivityMainBinding binding;
     private LocationBottomSheetFragment currentLocationBottomSheet;
 
-    private Snackbar mSnackbar;
 
     // Debounced search runnable
     private final Runnable searchRunnable = new Runnable() {
@@ -200,7 +195,7 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
                         public void onError() {
                             binding.newsletterView.newsletterSignupButton.setEnabled(true);
                             binding.newsletterView.newsletterDeclineButton.setEnabled(true);
-                            showSnackbar(R.string.newsletter_signup_error, Snackbar.LENGTH_LONG);
+                            // Newsletter signup error - could add toast or logging here
                         }
                     });
                 }
@@ -220,7 +215,6 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
         if (savedInstanceState != null) {
             mSearchText = savedInstanceState.getString(KEY_SEARCH_TEXT);
             if (mSearchText == null) mSearchText = "";
-            mShowLowAccuracyWarning = savedInstanceState.getBoolean(KEY_SHOW_LOW_ACCURACY_WARNING);
             if (!TextUtils.isEmpty(mSearchText)) {
                 binding.searchInput.setText(mSearchText);
             }
@@ -293,6 +287,9 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
     protected void onResume() {
         super.onResume();
 
+        // Restore low accuracy flag from persistent storage
+        mIsLowAccuracy = accountManager.getLocationLowAccuracy(this);
+
         binding.drawerLayout.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
             @Override
             public void onGlobalLayout() {
@@ -354,7 +351,6 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
     @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         outState.putString(KEY_SEARCH_TEXT, mSearchText);
-        outState.putBoolean(KEY_SHOW_LOW_ACCURACY_WARNING, mShowLowAccuracyWarning);
         super.onSaveInstanceState(outState);
     }
 
@@ -429,7 +425,7 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
         mIssuesRequestListener = new FiveCallsApi.IssuesRequestListener() {
             @Override
             public void onRequestError() {
-                showSnackbar(R.string.request_error, Snackbar.LENGTH_LONG);
+                // Request error - could add toast or logging here
                 // Our only type of request in MainActivity is a GET. If it doesn't work, clear the
                 // active issues list to avoid showing a stale list.
                 mIssuesAdapter.setAllIssues(Collections.<Issue>emptyList(),
@@ -439,7 +435,7 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
 
             @Override
             public void onJsonError() {
-                showSnackbar(R.string.json_error, Snackbar.LENGTH_LONG);
+                // JSON error - could add toast or logging here
                 // Our only type of request in MainActivity is a GET. If it doesn't work, clear the
                 // active issues list to avoid showing a stale list.
                 mIssuesAdapter.setAllIssues(Collections.<Issue>emptyList(),
@@ -462,7 +458,7 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
         mContactsRequestListener = new FiveCallsApi.ContactsRequestListener() {
             @Override
             public void onRequestError() {
-                showSnackbar(R.string.request_error, Snackbar.LENGTH_LONG);
+                // Request error - could add toast or logging here
                 // Our only type of request in MainActivity is a GET. If it doesn't work, clear the
                 // active issues list to avoid showing a stale list.
                 mIssuesAdapter.setAddressError(IssuesAdapter.ERROR_REQUEST);
@@ -475,7 +471,7 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
                 if (currentLocationBottomSheet != null && currentLocationBottomSheet.isVisible()) {
                     currentLocationBottomSheet.onLocationValidationError("Invalid or no data for this location. Try again later.");
                 } else {
-                    showSnackbar(R.string.json_error, Snackbar.LENGTH_LONG);
+                    // JSON error - could add toast or logging here
                 }
                 // Our only type of request in MainActivity is a GET. If it doesn't work, clear the
                 // active issues list to avoid showing a stale list.
@@ -485,22 +481,48 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
 
             @Override
             public void onAddressError() {
-                showAddressErrorSnackbar();
+                // Address error - handled by bottom sheet UI
                 mIssuesAdapter.setAddressError(IssuesAdapter.ERROR_ADDRESS);
                 binding.swipeContainer.setRefreshing(false);
             }
 
             @Override
-            public void onContactsReceived(String locationName, boolean isLowAccuracy,
-                                           List<Contact> contacts) {
+            public void onContactsReceived(String locationName, boolean isLowAccuracy, String lowAccuracyMessage,
+                                           List<Contact> contacts, String city, String county, String state) {
                 // Always update with server-provided location name (server does the geocoding)
                 mLocationName = TextUtils.isEmpty(locationName) ?
                         getResources().getString(R.string.unknown_location) : locationName;
-                updateLocationHeader();
-                mIssuesAdapter.setContacts(contacts, IssuesAdapter.NO_ERROR);
+
+                // Save location metadata persistently (like lat/lng and address)
+                AccountManager accountManager = AccountManager.Instance;
+                if (!TextUtils.isEmpty(city)) {
+                    accountManager.setLocationCity(getApplicationContext(), city);
+                }
+                if (!TextUtils.isEmpty(county)) {
+                    accountManager.setLocationCounty(getApplicationContext(), county);
+                }
+                if (!TextUtils.isEmpty(state)) {
+                    accountManager.setLocationState(getApplicationContext(), state);
+                }
+
+                // Store low accuracy flag and message for UI warnings (like iOS)
+                accountManager.setLocationLowAccuracy(getApplicationContext(), isLowAccuracy);
+                if (!TextUtils.isEmpty(lowAccuracyMessage)) {
+                    accountManager.setLocationLowAccuracyMessage(getApplicationContext(), lowAccuracyMessage);
+                }
+
+                // Update member variable BEFORE calling updateLocationHeader
                 mIsLowAccuracy = isLowAccuracy;
 
-                hideSnackbars();
+                // Update location header after all data is saved (including low accuracy flag)
+                updateLocationHeader();
+
+                mIssuesAdapter.setContacts(contacts, IssuesAdapter.NO_ERROR);
+
+                // Now that location metadata is saved, fetch issues with the new location data
+                FiveCallsApi api = AppSingleton.getInstance(getApplicationContext()).getJsonController();
+                api.getIssues();
+
 
                 // If we have an open location bottom sheet, dismiss it on successful validation
                 if (currentLocationBottomSheet != null && currentLocationBottomSheet.isVisible()) {
@@ -508,37 +530,7 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
                     currentLocationBottomSheet = null; // Clear reference
                 }
 
-                if (mShowLowAccuracyWarning) {
-                    // Check if this is a split district by seeing if there are >2 reps in the house.
-                    int houseCount = 0;
-                    for (Contact contact : contacts) {
-                        if (TextUtils.equals(contact.area, "US House")) {
-                            houseCount++;
-                        }
-                    }
-                    if (houseCount > 1 || mIsLowAccuracy) {
-                        int warning = houseCount > 1 ? R.string.split_district_warning :
-                                R.string.low_accuracy_warning;
-                        mSnackbar = Snackbar.make(binding.drawerLayout, warning,
-                                        Snackbar.LENGTH_INDEFINITE)
-                                .setAction(R.string.update, view -> showLocationBottomSheet());
-                        mSnackbar.setActionTextColor(getResources().getColor(
-                                R.color.colorAccentLight));
-                        mSnackbar.addCallback(new BaseTransientBottomBar.BaseCallback<>() {
-                            @Override
-                            public void onDismissed(Snackbar transientBottomBar, int event) {
-                                super.onDismissed(transientBottomBar, event);
-                                mSnackbar = null;
-                            }
-                        });
-                        // https://stackoverflow.com/questions/30705607/android-multiline-snackbar
-                        TextView textView = mSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
-                        textView.setMaxLines(5);
-                        mSnackbar.show();
-                        // Only show it once.
-                        mShowLowAccuracyWarning = false;
-                    }
-                }
+                binding.swipeContainer.setRefreshing(false);
             }
         };
 
@@ -611,9 +603,12 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
         if (!mIssuesAdapter.hasContacts()) {
             String location = getLocationString();
             if (!TextUtils.isEmpty(location)) {
+                // getContacts will call getIssues() after location metadata is saved
                 api.getContacts(location);
+                return; // Don't call getIssues() here - wait for onContactsReceived
             }
         }
+        // Only call getIssues() directly if we already have contacts (no location change)
         api.getIssues();
     }
 
@@ -681,45 +676,6 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
         // TextWatcher will handle clearing the search
     }
 
-    private void hideSnackbars() {
-        // Hide any existing snackbars.
-        if (mSnackbar != null) {
-            mSnackbar.dismiss();
-            mSnackbar = null;
-        }
-    }
-
-    private void showSnackbar(int message, int length) {
-        if (mSnackbar == null) {
-            constructSnackbar(message, length);
-            mSnackbar.show();
-        }
-    }
-
-    private void showAddressErrorSnackbar() {
-        hideSnackbars();
-        constructSnackbar(R.string.error_address_invalid, Snackbar.LENGTH_INDEFINITE);
-        mSnackbar.setAction(R.string.update, new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showLocationBottomSheet();
-            }
-        });
-        mSnackbar.show();
-    }
-
-    private void constructSnackbar(int message, int length) {
-        mSnackbar = Snackbar.make(binding.drawerLayout,
-                getResources().getString(message),
-                length);
-        mSnackbar.addCallback(new BaseTransientBottomBar.BaseCallback<Snackbar>() {
-            @Override
-            public void onDismissed(Snackbar transientBottomBar, int event) {
-                super.onDismissed(transientBottomBar, event);
-                mSnackbar = null;
-            }
-        });
-    }
 
     private void setupCategoryFilters() {
         LinearLayout categoryContainer = binding.categoryChipsContainer;
@@ -840,20 +796,26 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
         TextView locationDescription = binding.locationDescription;
         TextView locationText = binding.locationText;
         ImageView locationIcon = binding.locationIcon;
-        
+
         if (TextUtils.isEmpty(mLocationName) || mLocationName.equals(getString(R.string.unknown_location))) {
             // No location set - single line
             locationDescription.setVisibility(View.GONE);
             locationIcon.setVisibility(View.GONE);
             locationText.setText("Set Your Location");
-            locationText.setTextSize(16); // Smaller when no location set
+            locationText.setTextSize(18); // Consistent size
         } else {
-            // Location set - two lines like iOS
-            locationDescription.setVisibility(View.VISIBLE);
+            // Location set - show just the location name like iOS
+            locationDescription.setVisibility(View.GONE);
             locationIcon.setVisibility(View.VISIBLE);
-            locationDescription.setText("Your location is:");
-            locationText.setText(mLocationName);
-            locationText.setTextSize(18); // Larger for the city name
+
+            if (mIsLowAccuracy) {
+                // Show warning emoji for low accuracy locations
+                locationText.setText("⚠️ " + mLocationName);
+            } else {
+                // Normal accurate location
+                locationText.setText(mLocationName);
+            }
+            locationText.setTextSize(18);
         }
     }
     
@@ -875,7 +837,6 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
         // Clear existing contacts so new ones will be fetched for the new location
         mIssuesAdapter.setContacts(new ArrayList<Contact>(), IssuesAdapter.NO_ERROR);
         // We can show the warning again next time, because the location may have changed.
-        mShowLowAccuracyWarning = true;
         
         // Don't update header here - let server response update it to avoid flicker
         refreshIssues();

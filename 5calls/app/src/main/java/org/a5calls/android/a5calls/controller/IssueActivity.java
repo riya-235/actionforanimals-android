@@ -9,6 +9,7 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -18,6 +19,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import org.a5calls.android.a5calls.AppSingleton;
 import org.a5calls.android.a5calls.FiveCallsApplication;
+import org.a5calls.android.a5calls.net.FiveCallsApi;
 import org.a5calls.android.a5calls.R;
 import org.a5calls.android.a5calls.databinding.ActivityIssueBinding;
 import org.a5calls.android.a5calls.model.AccountManager;
@@ -36,7 +38,7 @@ import java.util.List;
  * iOS-style issue detail screen that matches AnimalPolicyDetail.swift
  * Simplified version for political campaigns only (calling representatives)
  */
-public class IssueActivity extends AppCompatActivity {
+public class IssueActivity extends AppCompatActivity implements FiveCallsApi.ContactsRequestListener {
     private static final String TAG = "IssueActivity";
     public static final String KEY_ISSUE = "key_issue";
     public static final String KEY_IS_LOW_ACCURACY = "key_is_low_accuracy";
@@ -48,9 +50,13 @@ public class IssueActivity extends AppCompatActivity {
     private boolean mIsLowAccuracy = false;
     private boolean mDonateIsOn = false;
     private final AccountManager accountManager = AccountManager.Instance;
+    private LocationBottomSheetFragment currentLocationBottomSheet;
 
     private ActivityIssueBinding binding;
     private List<Contact> mContacts = new ArrayList<>();
+    private String mOriginalCity; // Store original location when issue loaded
+    private String mOriginalCounty;
+    private String mOriginalState;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -72,7 +78,12 @@ public class IssueActivity extends AppCompatActivity {
         setupLocationSection();
         setupContactsSection();
         setupActionButtons();
-        
+
+        // Store original location when issue loads for comparison later
+        mOriginalCity = accountManager.getLocationCity(this);
+        mOriginalCounty = accountManager.getLocationCounty(this);
+        mOriginalState = accountManager.getLocationState(this);
+
         // Clear the content change indicator when user views the issue
         ContentChangeManager contentChangeManager = new ContentChangeManager(this);
         contentChangeManager.clearIssueChanged(mIssue.id);
@@ -81,13 +92,114 @@ public class IssueActivity extends AppCompatActivity {
         FiveCallsApplication.analyticsManager().trackPageview("/issue/" + mIssue.slug + "/", this);
     }
 
+    /**
+     * Add iOS-style low accuracy warning view to contacts container
+     */
+    private void addLowAccuracyWarningView(LinearLayout container) {
+        // Create main container with vertical orientation and center alignment
+        LinearLayout warningView = new LinearLayout(this);
+        warningView.setOrientation(LinearLayout.VERTICAL);
+        warningView.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        warningView.setPadding(40, 32, 40, 32);
+
+        // Location pin icon in light blue circle (like iOS)
+        FrameLayout iconContainer = new FrameLayout(this);
+        LinearLayout.LayoutParams iconContainerParams = new LinearLayout.LayoutParams(
+                (int) (60 * getResources().getDisplayMetrics().density),
+                (int) (60 * getResources().getDisplayMetrics().density)
+        );
+        iconContainerParams.bottomMargin = (int) (16 * getResources().getDisplayMetrics().density);
+        iconContainer.setLayoutParams(iconContainerParams);
+
+        // Blue circle background
+        android.graphics.drawable.GradientDrawable circleDrawable = new android.graphics.drawable.GradientDrawable();
+        circleDrawable.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        circleDrawable.setColor(0x1A007AFF); // Light blue with alpha (like iOS)
+        iconContainer.setBackground(circleDrawable);
+
+        // Location icon
+        ImageView locationIcon = new ImageView(this);
+        FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(
+                (int) (24 * getResources().getDisplayMetrics().density),
+                (int) (24 * getResources().getDisplayMetrics().density)
+        );
+        iconParams.gravity = android.view.Gravity.CENTER;
+        locationIcon.setLayoutParams(iconParams);
+        locationIcon.setImageResource(R.drawable.ic_location_on);
+        locationIcon.setColorFilter(0xFF007AFF); // Blue color
+        iconContainer.addView(locationIcon);
+        warningView.addView(iconContainer);
+
+        // Main heading - use iOS message (not server message)
+        TextView heading = new TextView(this);
+        heading.setText("We need a more specific address");
+        heading.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 18);
+        heading.setTextColor(getResources().getColor(R.color.text_primary_modern, null));
+        heading.setTypeface(null, android.graphics.Typeface.BOLD);
+        heading.setGravity(android.view.Gravity.CENTER);
+        LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        headingParams.bottomMargin = (int) (24 * getResources().getDisplayMetrics().density);
+        heading.setLayoutParams(headingParams);
+        warningView.addView(heading);
+
+        // Update Location button (like iOS blue button)
+        Button updateLocationButton = new Button(this);
+        updateLocationButton.setText("Update Location");
+        updateLocationButton.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 16);
+        updateLocationButton.setTextColor(android.graphics.Color.WHITE);
+        updateLocationButton.setTypeface(null, android.graphics.Typeface.BOLD);
+        updateLocationButton.setPadding(
+                (int) (24 * getResources().getDisplayMetrics().density),
+                (int) (12 * getResources().getDisplayMetrics().density),
+                (int) (24 * getResources().getDisplayMetrics().density),
+                (int) (12 * getResources().getDisplayMetrics().density)
+        );
+
+        // Blue rounded background
+        android.graphics.drawable.GradientDrawable buttonDrawable = new android.graphics.drawable.GradientDrawable();
+        buttonDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        buttonDrawable.setColor(0xFF007AFF); // iOS blue
+        buttonDrawable.setCornerRadius(20 * getResources().getDisplayMetrics().density);
+        updateLocationButton.setBackground(buttonDrawable);
+
+        // Button click handler - open location bottom sheet
+        updateLocationButton.setOnClickListener(v -> {
+            showLocationBottomSheet();
+        });
+
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        updateLocationButton.setLayoutParams(buttonParams);
+        warningView.addView(updateLocationButton);
+
+        container.addView(warningView);
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+
+        // Refresh the low accuracy flag from persistent storage (like MainActivity does)
+        mIsLowAccuracy = accountManager.getLocationLowAccuracy(this);
+
         // Refresh all sections when returning to this activity
         setupLocationSection();
         setupContactsSection();
         setupActionButtons();
+    }
+
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // Clean up listener to avoid memory leaks
+        FiveCallsApi api = AppSingleton.getInstance(this).getJsonController();
+        api.unregisterContactsRequestListener(this);
     }
     
     private void setupActionBar() {
@@ -182,8 +294,18 @@ public class IssueActivity extends AppCompatActivity {
     }
     
     private void setupPoliticalActionButtons() {
+        // Check if we have any targeted contacts to call
+        List<Contact> targetedContacts = (mIssue.contacts != null) ? mIssue.getTargetedContacts() : new ArrayList<>();
+
+        if (targetedContacts.isEmpty()) {
+            // Hide action buttons when no targeted contacts available
+            binding.actionButtonsSection.setVisibility(View.GONE);
+            android.util.Log.d("IssueActivity", "Hiding action buttons - no targeted contacts available");
+            return;
+        }
+
         binding.actionButtonsSection.setVisibility(View.VISIBLE);
-        android.util.Log.d("IssueActivity", "Showing action buttons - location available");
+        android.util.Log.d("IssueActivity", "Showing action buttons - targeted contacts available");
 
         // Setup primary action button for calling representatives
         binding.primaryActionButton.setText(R.string.make_calls_button);
@@ -202,18 +324,28 @@ public class IssueActivity extends AppCompatActivity {
     }
     
     private void setupCorporateActionButtons() {
+        // Check if we have any targets for corporate campaigns
+        boolean hasTargets = mIssue.targets != null && !mIssue.targets.isEmpty();
+
+        if (!hasTargets) {
+            // Hide action buttons when no targets available
+            binding.actionButtonsSection.setVisibility(View.GONE);
+            android.util.Log.d("IssueActivity", "Hiding action buttons - no corporate targets available");
+            return;
+        }
+
         binding.actionButtonsSection.setVisibility(View.VISIBLE);
-        
+
         // Check if email is enabled
-        boolean emailEnabled = mIssue.actions != null && 
-                              mIssue.actions.email != null && 
+        boolean emailEnabled = mIssue.actions != null &&
+                              mIssue.actions.email != null &&
                               mIssue.actions.email.enabled;
-        
-        // Check if call is enabled  
-        boolean callEnabled = mIssue.actions != null && 
-                             mIssue.actions.call != null && 
+
+        // Check if call is enabled
+        boolean callEnabled = mIssue.actions != null &&
+                             mIssue.actions.call != null &&
                              mIssue.actions.call.enabled;
-        
+
         if (emailEnabled) {
             // Email campaign - show email button
             binding.primaryActionButton.setText(getString(R.string.send_email_button));
@@ -427,8 +559,23 @@ public class IssueActivity extends AppCompatActivity {
             }
         }
 
+        // Get categorized contacts using new Issue methods first
+        List<Contact> targetedContacts = (mIssue.contacts != null) ? mIssue.getTargetedContacts() : new ArrayList<>();
+        List<Contact> irrelevantContacts = mIssue.getIrrelevantContacts();
+        List<String> vacantAreas = mIssue.getVacantAreas();
+
+        // Check if we should show low accuracy warning instead of empty contact list (like iOS)
+        boolean isPoliticalCampaign = !"CORPORATE".equals(mIssue.contactType);
+        boolean shouldShowLowAccuracyWarning = isPoliticalCampaign && targetedContacts.isEmpty() && mIsLowAccuracy;
+
+        if (shouldShowLowAccuracyWarning) {
+            // Show iOS-style location accuracy warning with update button
+            addLowAccuracyWarningView(contactsContainer);
+            return;
+        }
+
         if (mIssue.contacts == null || mIssue.contacts.isEmpty()) {
-            // Show message when no contacts available
+            // Show message when no contacts available (and not low accuracy case)
             TextView noContacts = new TextView(this);
             noContacts.setText("No representatives found for your location.");
             noContacts.setTextColor(getResources().getColor(R.color.text_secondary_modern, null));
@@ -436,12 +583,6 @@ public class IssueActivity extends AppCompatActivity {
             contactsContainer.addView(noContacts);
             return;
         }
-
-        // Get categorized contacts using new Issue methods
-        List<Contact> targetedContacts = mIssue.getTargetedContacts();
-        List<Contact> irrelevantContacts = mIssue.getIrrelevantContacts();
-        List<String> vacantAreas = mIssue.getVacantAreas();
-
 
         // Add targeted contacts section
         if (!targetedContacts.isEmpty()) {
@@ -579,10 +720,98 @@ public class IssueActivity extends AppCompatActivity {
     private void showLocationBottomSheet() {
         LocationBottomSheetFragment locationBottomSheet = LocationBottomSheetFragment.newInstance();
         locationBottomSheet.setLocationSetListener(location -> {
-            // Refresh the screen when location is set
-            recreate();
+            android.util.Log.d(TAG, "Location updated: " + location);
+            // Save the location like MainActivity does
+            AccountManager.Instance.setAddress(this, location);
+            AccountManager.Instance.setLat(this, null);
+            AccountManager.Instance.setLng(this, null);
+
+            // Update the global app state by making the same call MainActivity makes
+            FiveCallsApi api = AppSingleton.getInstance(this).getJsonController();
+            api.registerContactsRequestListener(this); // Listen for the response
+            android.util.Log.d(TAG, "Making API call for location: " + location);
+            api.getContacts(location);
+
+            // recreate() will be called in onContactsReceived() when data arrives
         });
         locationBottomSheet.show(getSupportFragmentManager(), "LocationBottomSheet");
+    }
+
+    // ContactsRequestListener implementation - only for location updates
+    @Override
+    public void onContactsReceived(String locationName, boolean isLowAccuracy, String lowAccuracyMessage,
+                                   List<Contact> contacts, String city, String county, String state) {
+        android.util.Log.d(TAG, "Location updated, checking if location changed significantly");
+
+        AccountManager accountManager = AccountManager.Instance;
+
+        boolean locationChanged = false;
+
+        // Compare new location with original location when issue was loaded
+        // Check state first to handle cases like Portland, OR vs Portland, ME
+        if (!TextUtils.isEmpty(mOriginalState) && !TextUtils.isEmpty(state) && !TextUtils.equals(mOriginalState, state)) {
+            locationChanged = true;
+        }
+        // If state is the same or empty, check city
+        else if (!TextUtils.isEmpty(mOriginalCity) && !TextUtils.isEmpty(city) && !TextUtils.equals(mOriginalCity, city)) {
+            locationChanged = true;
+        }
+        // If state and city are same/empty, check county (skip if county is empty as it can be missing for low accuracy)
+        else if (!TextUtils.isEmpty(mOriginalCounty) && !TextUtils.isEmpty(county) && !TextUtils.equals(mOriginalCounty, county)) {
+            locationChanged = true;
+        }
+
+        // Update location metadata
+        if (!TextUtils.isEmpty(city)) {
+            accountManager.setLocationCity(this, city);
+        }
+        if (!TextUtils.isEmpty(county)) {
+            accountManager.setLocationCounty(this, county);
+        }
+        if (!TextUtils.isEmpty(state)) {
+            accountManager.setLocationState(this, state);
+        }
+        accountManager.setLocationLowAccuracy(this, isLowAccuracy);
+        if (!TextUtils.isEmpty(lowAccuracyMessage)) {
+            accountManager.setLocationLowAccuracyMessage(this, lowAccuracyMessage);
+        }
+
+        if (locationChanged) {
+            // Location changed significantly - go back to MainActivity to refresh issues for new location
+            android.util.Log.d(TAG, "Location changed significantly, navigating back to MainActivity");
+            finish(); // This will take user back to MainActivity which will refresh with new location
+        } else {
+            // Same location, just update accuracy - recreate to refresh UI
+            android.util.Log.d(TAG, "Same location, just updating accuracy and recreating");
+
+            // Update the global contact pool
+            mContacts = contacts;
+
+            // Use the same filtering logic as IssuesAdapter
+            mIssue.filterContactsByAreas(contacts);
+            mIsLowAccuracy = isLowAccuracy;
+
+            // Recreate the activity to refresh with new contact data
+            recreate();
+        }
+    }
+
+    @Override
+    public void onRequestError() {
+        android.util.Log.d(TAG, "onRequestError - keeping current UI");
+        // Don't recreate - just log the error and keep current state
+    }
+
+    @Override
+    public void onJsonError() {
+        android.util.Log.d(TAG, "onJsonError - keeping current UI");
+        // Don't recreate - just log the error and keep current state
+    }
+
+    @Override
+    public void onAddressError() {
+        // Address error - still recreate to show any partial data
+        recreate();
     }
 
     private void launchContactDetail() {

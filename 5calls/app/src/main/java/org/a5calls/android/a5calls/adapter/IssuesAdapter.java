@@ -399,24 +399,8 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                 return;
             }
 
-            issue.contacts = new ArrayList<Contact>();
-            int houseCount = 0;  // Only add the first contact in the house for each issue.
-            for (String contactArea : issue.contactAreas) {
-                for (Contact contact : mContacts) {
-                    if (TextUtils.equals(contact.area, contactArea) &&
-                            !issue.contacts.contains(contact)) {
-                        if (TextUtils.equals(contact.area, "US House")) {
-                            houseCount++;
-                            if (houseCount > 1) {
-                                issue.isSplit = true;
-                                continue;
-                            }
-                        }
-
-                        issue.contacts.add(contact);
-                    }
-                }
-            }
+            // Use centralized filtering logic from Issue model
+            issue.filterContactsByAreas(mContacts);
             
             // Setup category icon and completion status
             setupCategoryIcon(issue, vh);

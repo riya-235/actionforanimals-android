@@ -25,6 +25,11 @@ public enum AccountManager {
     private static final String KEY_USER_ADDRESS = "prefsKeyUserZip";
     private static final String KEY_LATITUDE = "prefsKeyLatitude";
     private static final String KEY_LONGITUDE = "prefsKeyLongitude";
+    private static final String KEY_LOCATION_CITY = "prefsKeyLocationCity";
+    private static final String KEY_LOCATION_COUNTY = "prefsKeyLocationCounty";
+    private static final String KEY_LOCATION_STATE = "prefsKeyLocationState";
+    private static final String KEY_LOCATION_LOW_ACCURACY = "prefsKeyLocationLowAccuracy";
+    private static final String KEY_LOCATION_LOW_ACCURACY_MESSAGE = "prefsKeyLocationLowAccuracyMessage";
     private static final String KEY_DATABASE_SAVES_CONTACTS = "prefsKeyDbSavesContacts";
     public static final String KEY_REMINDER_MINUTES = "prefsKeyNotificationMinutes";
     public static final String KEY_REMINDER_DAYS = "prefsKeyReminderDays";
@@ -97,6 +102,46 @@ public enum AccountManager {
 
     public void setLng(Context context, String lng) {
         getSharedPrefs(context).edit().putString(KEY_LONGITUDE, lng).apply();
+    }
+
+    public String getLocationCity(Context context) {
+        return getSharedPrefs(context).getString(KEY_LOCATION_CITY, "");
+    }
+
+    public void setLocationCity(Context context, String city) {
+        getSharedPrefs(context).edit().putString(KEY_LOCATION_CITY, city).apply();
+    }
+
+    public String getLocationCounty(Context context) {
+        return getSharedPrefs(context).getString(KEY_LOCATION_COUNTY, "");
+    }
+
+    public void setLocationCounty(Context context, String county) {
+        getSharedPrefs(context).edit().putString(KEY_LOCATION_COUNTY, county).apply();
+    }
+
+    public String getLocationState(Context context) {
+        return getSharedPrefs(context).getString(KEY_LOCATION_STATE, "");
+    }
+
+    public void setLocationState(Context context, String state) {
+        getSharedPrefs(context).edit().putString(KEY_LOCATION_STATE, state).apply();
+    }
+
+    public boolean getLocationLowAccuracy(Context context) {
+        return getSharedPrefs(context).getBoolean(KEY_LOCATION_LOW_ACCURACY, false);
+    }
+
+    public void setLocationLowAccuracy(Context context, boolean lowAccuracy) {
+        getSharedPrefs(context).edit().putBoolean(KEY_LOCATION_LOW_ACCURACY, lowAccuracy).apply();
+    }
+
+    public String getLocationLowAccuracyMessage(Context context) {
+        return getSharedPrefs(context).getString(KEY_LOCATION_LOW_ACCURACY_MESSAGE, null);
+    }
+
+    public void setLocationLowAccuracyMessage(Context context, String message) {
+        getSharedPrefs(context).edit().putString(KEY_LOCATION_LOW_ACCURACY_MESSAGE, message).apply();
     }
 
     // Defaults to true

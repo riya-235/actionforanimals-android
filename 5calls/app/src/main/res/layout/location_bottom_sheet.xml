@@ -18,6 +18,20 @@
         android:layout_marginTop="8dp"
         android:layout_marginBottom="32dp" />
 
+    <!-- iOS-style warning message (shown when low accuracy) -->
+    <TextView
+        android:id="@+id/location_accuracy_warning"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="⚠️ Showing state/federal officials only. For local officials, please use &quot;Detect My Location&quot; or provide a specific street address."
+        android:textSize="13sp"
+        android:textColor="@android:color/holo_red_dark"
+        android:gravity="start"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:visibility="gone" />
+
     <!-- Input field with inline Enter button (iOS style) -->
     <LinearLayout
         android:layout_width="match_parent"

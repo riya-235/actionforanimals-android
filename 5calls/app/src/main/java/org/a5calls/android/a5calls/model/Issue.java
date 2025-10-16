@@ -94,6 +94,35 @@ public class Issue implements Parcelable {
     }
 
     /**
+     * Filter and set contacts for this issue based on contactAreas
+     * This centralizes the filtering logic that was previously in IssuesAdapter
+     */
+    public void filterContactsByAreas(List<Contact> allContacts) {
+        this.contacts = new ArrayList<>();
+        if (allContacts == null || allContacts.isEmpty() || contactAreas == null) {
+            return;
+        }
+
+        int houseCount = 0;
+        for (String contactArea : contactAreas) {
+            for (Contact contact : allContacts) {
+                if (android.text.TextUtils.equals(contact.area, contactArea) &&
+                        !this.contacts.contains(contact)) {
+                    // Handle House split districts (same logic as IssuesAdapter)
+                    if (android.text.TextUtils.equals(contact.area, "US House")) {
+                        houseCount++;
+                        if (houseCount > 1) {
+                            this.isSplit = true;
+                            continue;
+                        }
+                    }
+                    this.contacts.add(contact);
+                }
+            }
+        }
+    }
+
+    /**
      * Get contacts that should be actively contacted for this issue
      * This replicates iOS contactsForIssue() method
      */
@@ -102,8 +131,8 @@ public class Issue implements Parcelable {
             return new ArrayList<>();
         }
 
-        // For now, return all contacts since we don't have contactAreas logic yet
-        // In the future, this should filter based on contactAreas like iOS
+        // Now that filtering is handled by filterContactsByAreas(),
+        // this just returns the already-filtered contacts
         return new ArrayList<>(contacts);
     }
 

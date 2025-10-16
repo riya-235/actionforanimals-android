@@ -19,10 +19,16 @@ package org.a5calls.android.a5calls;
 import android.app.Activity;
 import android.app.Application;
 import android.os.Bundle;
+import android.util.Log;
 
 import androidx.core.app.NotificationManagerCompat;
 
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.Firebase;
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.appcheck.FirebaseAppCheck;
+import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory;
+import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory;
 
 import com.onesignal.OneSignal;
 
@@ -91,6 +97,38 @@ public class FiveCallsApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+
+        // Initialize Firebase and App Check
+        FirebaseApp.initializeApp(this);
+
+        // Enable debug logging for App Check
+        Log.d("FiveCallsApplication", "Initializing App Check with Play Integrity");
+
+        FirebaseAppCheck firebaseAppCheck = FirebaseAppCheck.getInstance();
+
+        if (BuildConfig.DEBUG) {
+            // Use debug provider for debug builds - works immediately
+            Log.d("FiveCallsApplication", "Using Debug App Check Provider for development");
+
+            firebaseAppCheck.installAppCheckProviderFactory(
+                DebugAppCheckProviderFactory.getInstance()
+            );
+        } else {
+            // Use Play Integrity for release builds
+            Log.d("FiveCallsApplication", "Using Play Integrity App Check Provider for release");
+            firebaseAppCheck.installAppCheckProviderFactory(
+                PlayIntegrityAppCheckProviderFactory.getInstance()
+            );
+        }
+
+        // Add token listener for debugging
+        firebaseAppCheck.addAppCheckListener(token -> {
+            Log.d("AppCheck", "App Check token received: " + (token != null ? "valid" : "null"));
+            if (token != null) {
+                Log.d("AppCheck", "Token length: " + token.getToken().length());
+                Log.d("AppCheck", "Token prefix: " + token.getToken().substring(0, Math.min(20, token.getToken().length())));
+            }
+        });
 
         // Set up OneSignal.
         OneSignal.initWithContext(this, ONESIGNAL_APP_ID);

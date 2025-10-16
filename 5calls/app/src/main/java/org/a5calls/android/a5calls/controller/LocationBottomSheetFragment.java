@@ -46,6 +46,7 @@ public class LocationBottomSheetFragment extends BottomSheetDialogFragment {
     private ImageView submitButton;
     private TextView detectLocationButton;
     private TextView locationError;
+    private TextView locationAccuracyWarning;
     private LocationListener mLocationListener;
     
     public static LocationBottomSheetFragment newInstance() {
@@ -70,6 +71,10 @@ public class LocationBottomSheetFragment extends BottomSheetDialogFragment {
         submitButton = view.findViewById(R.id.submit_location_button);
         detectLocationButton = view.findViewById(R.id.detect_location_button);
         locationError = view.findViewById(R.id.location_error);
+        locationAccuracyWarning = view.findViewById(R.id.location_accuracy_warning);
+
+        // Show iOS-style warning if location accuracy is low
+        showWarningIfLowAccuracy();
         
         submitButton.setOnClickListener(v -> {
             String location = locationInput.getText().toString().trim();
@@ -87,6 +92,25 @@ public class LocationBottomSheetFragment extends BottomSheetDialogFragment {
         
         // Auto focus the input field
         locationInput.requestFocus();
+    }
+
+    private void showWarningIfLowAccuracy() {
+        if (getContext() != null) {
+            boolean isLowAccuracy = AccountManager.Instance.getLocationLowAccuracy(getContext());
+            String message = AccountManager.Instance.getLocationLowAccuracyMessage(getContext());
+
+            if (isLowAccuracy && !TextUtils.isEmpty(message)) {
+                // Use server message if available
+                locationAccuracyWarning.setText("⚠️ " + message);
+                locationAccuracyWarning.setVisibility(View.VISIBLE);
+            } else if (isLowAccuracy) {
+                // Use iOS fallback message
+                locationAccuracyWarning.setText("⚠️ Showing state/federal officials only. For local officials, please use \"Detect My Location\" or provide a specific street address.");
+                locationAccuracyWarning.setVisibility(View.VISIBLE);
+            } else {
+                locationAccuracyWarning.setVisibility(View.GONE);
+            }
+        }
     }
     
     @Override
@@ -253,7 +277,9 @@ public class LocationBottomSheetFragment extends BottomSheetDialogFragment {
         if (listener != null) {
             listener.onLocationSet(address); // Use original input, server will provide real location name
         }
-        // Don't dismiss - wait for validation result
+
+        // Dismiss immediately like GPS location - let the caller handle validation
+        dismiss();
     }
     
     public void onLocationValidationSuccess() {
