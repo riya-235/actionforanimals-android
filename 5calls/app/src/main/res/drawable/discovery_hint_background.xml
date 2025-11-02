@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <!-- Keep the same subtle gray background as normal state -->
+    <solid android:color="#1A000000" />
+
+    <!-- Add green stroke for discovery hint -->
+    <stroke
+        android:width="2dp"
+        android:color="#4CAF50" />
+
+    <!-- Rounded corners to match counter view -->
+    <corners android:radius="16dp" />
+
+</shape>

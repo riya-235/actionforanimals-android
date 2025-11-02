@@ -1,13 +1,20 @@
 package org.a5calls.android.a5calls.controller;
 
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.text.method.LinkMovementMethod;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.animation.OvershootInterpolator;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -30,6 +37,8 @@ import org.a5calls.android.a5calls.model.Target;
 import org.a5calls.android.a5calls.util.MarkdownUtil;
 import org.a5calls.android.a5calls.util.ContentChangeManager;
 import org.a5calls.android.a5calls.view.ContactListItemView;
+import org.a5calls.android.a5calls.view.AchievementCelebrationView;
+import org.a5calls.android.a5calls.manager.AchievementManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,6 +56,7 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
     public static final int RESULT_SERVER_ERROR = 2;
 
     private Issue mIssue;
+    private Menu currentMenu; // Store menu reference for counter animation
     private boolean mIsLowAccuracy = false;
     private boolean mDonateIsOn = false;
     private final AccountManager accountManager = AccountManager.Instance;
@@ -57,6 +67,7 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
     private String mOriginalCity; // Store original location when issue loaded
     private String mOriginalCounty;
     private String mOriginalState;
+
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -184,6 +195,9 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
     protected void onResume() {
         super.onResume();
 
+        // Check for pending achievements (like iOS ImpactManager)
+        checkPendingAchievements();
+
         // Refresh the low accuracy flag from persistent storage (like MainActivity does)
         mIsLowAccuracy = accountManager.getLocationLowAccuracy(this);
 
@@ -191,6 +205,50 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
         setupLocationSection();
         setupContactsSection();
         setupActionButtons();
+
+        // Refresh animals counter in action bar when returning from action
+        refreshAnimalsCounterInActionBar();
+
+        // Check if we should pulse the counter (same pattern as contact → contact)
+        boolean shouldPulse = getIntent().getBooleanExtra("SHOULD_PULSE_COUNTER", false);
+        Log.d("IssueActivity", "onResume: SHOULD_PULSE_COUNTER = " + shouldPulse);
+
+        if (shouldPulse) {
+            // Clear the flag so it doesn't pulse again
+            getIntent().removeExtra("SHOULD_PULSE_COUNTER");
+            Log.d("IssueActivity", "onResume: Triggering pulse animation");
+
+            // Short delay to ensure menu is ready but feel connected to the action
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                Log.d("IssueActivity", "onResume: Calling animateMenuCounter()");
+                animateMenuCounter();
+            }, 300);
+        }
+
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        Log.d("IssueActivity", "onActivityResult: requestCode=" + requestCode + ", resultCode=" + resultCode + ", data=" + (data != null));
+        if (data != null) {
+            Log.d("IssueActivity", "onActivityResult: SHOULD_PULSE_COUNTER = " + data.getBooleanExtra("SHOULD_PULSE_COUNTER", false));
+        }
+
+        // Check if returning from any activity (EmailComposer, RepCall, etc.) with pulse flag
+        if (resultCode == android.app.Activity.RESULT_OK && data != null && data.getBooleanExtra("SHOULD_PULSE_COUNTER", false)) {
+            Log.d("IssueActivity", "onActivityResult: Triggering pulse animation");
+            // Short delay to ensure menu is ready but feel connected to the action
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                animateMenuCounter();
+            }, 300);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
     }
 
 
@@ -215,6 +273,66 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
         MarkdownUtil.setUpScript(binding.issueDescription, mIssue.reason, getApplicationContext());
         // Enable link clicking for markdown links
         binding.issueDescription.setMovementMethod(LinkMovementMethod.getInstance());
+
+        // Setup impact preview section
+        setupImpactPreview();
+    }
+
+    private void setupImpactPreview() {
+        TextView impactText = findViewById(R.id.impact_preview_text);
+        ImageView infoIcon = findViewById(R.id.impact_info_icon);
+
+        if (impactText != null) {
+            String text = "Take action, help save " + mIssue.animalsHelpedPerAction + " animals";
+            impactText.setText(text);
+        }
+
+        if (infoIcon != null) {
+            infoIcon.setOnClickListener(v -> showImpactInfoDialog());
+        }
+    }
+
+    private void showImpactInfoDialog() {
+        // Create a custom popover-style dialog like iOS
+        View popoverView = getLayoutInflater().inflate(R.layout.impact_info_popover, null);
+
+        // Measure the popup to get its actual dimensions
+        popoverView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int popupWidth = popoverView.getMeasuredWidth();
+        int popupHeight = popoverView.getMeasuredHeight();
+
+        // Force specific width to match iOS (180 points)
+        int fixedWidth = (int)(180 * getResources().getDisplayMetrics().density); // 180dp in pixels
+
+        android.widget.PopupWindow popupWindow = new android.widget.PopupWindow(
+            popoverView,
+            fixedWidth,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            true // focusable
+        );
+
+        // Set background to enable dismissal when clicking outside
+        popupWindow.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        popupWindow.setOutsideTouchable(true);
+
+        // Find the info icon to position the popup relative to it
+        View anchorView = findViewById(R.id.impact_info_icon);
+        if (anchorView != null) {
+            // Use showAsDropDown with calculated offsets - simpler and more reliable
+            float density = getResources().getDisplayMetrics().density;
+            int popup180dp = (int)(180 * density); // 180dp in pixels (matching iOS)
+            int iconSize = (int)(32 * density); // Icon size in pixels
+
+            // Calculate offsets relative to the anchor view
+            int offsetX = iconSize - popup180dp - (int)(20 * density); // Move left more to align properly
+            int offsetY = -(popupHeight > 0 ? popupHeight : (int)(90 * density)) - (int)(60 * density); // Move up more to touch icon exactly
+
+            Log.d("IssueActivity", "Popup positioning with showAsDropDown: offsetX=" + offsetX + ", offsetY=" + offsetY +
+                  ", popupWidth=" + popup180dp + ", estimatedHeight=" + (popupHeight > 0 ? popupHeight : (int)(90 * density)));
+
+            // Show using dropDown positioning (more reliable)
+            popupWindow.showAsDropDown(anchorView, offsetX, offsetY);
+        }
     }
 
     private void setupLocationSection() {
@@ -381,7 +499,7 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
         intent.putExtra(EmailComposerActivity.KEY_LOCATION_NAME, 
                        getIntent().getStringExtra(RepCallActivity.KEY_LOCATION_NAME));
         
-        startActivity(intent);
+        startActivityForResult(intent, 1001); // Request code for RepCallActivity
     }
     
     private void launchCorporateCall() {
@@ -402,7 +520,7 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
         intent.putExtra(CorporateCallActivity.KEY_ADDRESS, getIntent().getStringExtra(RepCallActivity.KEY_ADDRESS));
         intent.putExtra(CorporateCallActivity.KEY_LOCATION_NAME, getIntent().getStringExtra(RepCallActivity.KEY_LOCATION_NAME));
         
-        startActivity(intent);
+        startActivityForResult(intent, 1001); // Request code for RepCallActivity
     }
     
     private void populateCorporateTargets() {
@@ -537,7 +655,7 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
                 intent.putExtra(EmailComposerActivity.KEY_LOCATION_NAME, 
                                getIntent().getStringExtra(RepCallActivity.KEY_LOCATION_NAME));
                 
-                startActivity(intent);
+                startActivityForResult(intent, 1001); // Request code for RepCallActivity
             } else if (callEnabled) {
                 // Call campaign - launch corporate call for this specific target
                 launchCorporateCallForTarget(target);
@@ -713,7 +831,7 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
         intent.putExtra(RepCallActivity.KEY_LOCATION_NAME, getIntent().getStringExtra(RepCallActivity.KEY_LOCATION_NAME));
         intent.putExtra(KEY_IS_LOW_ACCURACY, mIsLowAccuracy);
         intent.putExtra(KEY_DONATE_IS_ON, mDonateIsOn);
-        startActivity(intent);
+        startActivityForResult(intent, 1001); // Request code for RepCallActivity
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
 
@@ -822,7 +940,7 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
         intent.putExtra(RepCallActivity.KEY_LOCATION_NAME, getIntent().getStringExtra(RepCallActivity.KEY_LOCATION_NAME));
         intent.putExtra(KEY_IS_LOW_ACCURACY, mIsLowAccuracy);
         intent.putExtra(KEY_DONATE_IS_ON, mDonateIsOn);
-        startActivity(intent);
+        startActivityForResult(intent, 1001); // Request code for RepCallActivity
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
 
@@ -830,6 +948,27 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
     public boolean onCreateOptionsMenu(Menu menu) {
         MenuInflater inflater = getMenuInflater();
         inflater.inflate(R.menu.menu_issue, menu);
+
+        // Store menu reference for counter animation
+        currentMenu = menu;
+
+        // Set up the animals counter in the action bar
+        MenuItem counterItem = menu.findItem(R.id.menu_animals_counter);
+        if (counterItem != null) {
+            View actionView = counterItem.getActionView();
+            if (actionView != null) {
+                // Update the counter display
+                updateAnimalsCounterInActionBar(actionView);
+
+                // The action view is the animals counter layout
+                actionView.setOnClickListener(v -> {
+                    // Open Your Impact dialog when counter is clicked
+                    YourImpactDialogFragment dialog = YourImpactDialogFragment.newInstance();
+                    dialog.show(getSupportFragmentManager(), "YourImpactDialog");
+                });
+            }
+        }
+
         return true;
     }
 
@@ -837,10 +976,6 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == android.R.id.home) {
             onBackPressed();
-            return true;
-        }
-        if (item.getItemId() == R.id.menu_share) {
-            sendShare();
             return true;
         }
         return super.onOptionsItemSelected(item);
@@ -852,16 +987,104 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 
-    private void sendShare() {
-        Intent shareIntent = new Intent();
-        shareIntent.setAction(Intent.ACTION_SEND);
-        shareIntent.putExtra(Intent.EXTRA_SUBJECT, getResources().getString(
-                R.string.issue_share_subject));
-        shareIntent.putExtra(Intent.EXTRA_TEXT,
-                String.format(getResources().getString(R.string.issue_share_content), mIssue.name,
-                        mIssue.slug));
-        shareIntent.setType("text/plain");
-        startActivity(Intent.createChooser(shareIntent, getResources().getString(
-                R.string.share_chooser_title)));
+    /**
+     * Updates the animals counter display in the action bar
+     */
+    private void updateAnimalsCounterInActionBar(View actionView) {
+        try {
+            TextView animalsCountTextView = actionView.findViewById(R.id.animals_count);
+            if (animalsCountTextView != null) {
+                DatabaseHelper db = AppSingleton.getInstance(this).getDatabaseHelper();
+                int totalAnimalsHelped = db.getTotalAnimalsHelped();
+                animalsCountTextView.setText(String.valueOf(totalAnimalsHelped));
+            }
+        } catch (Exception e) {
+            Log.e("IssueActivity", "Error updating animals counter", e);
+        }
+    }
+
+    /**
+     * Refreshes the animals counter when returning to this activity
+     */
+    private void refreshAnimalsCounterInActionBar() {
+        try {
+            // Find the counter in the options menu and refresh it
+            if (getMenuInflater() != null) {
+                // Force menu recreation to update counter
+                invalidateOptionsMenu();
+            }
+        } catch (Exception e) {
+            Log.e("IssueActivity", "Error refreshing animals counter", e);
+        }
+    }
+
+    private void animateMenuCounter() {
+        try {
+            Log.d("IssueActivity", "animateMenuCounter: Starting animation");
+            // Find the counter view in the menu using stored menu reference
+            if (getSupportActionBar() != null && currentMenu != null) {
+                Log.d("IssueActivity", "animateMenuCounter: ActionBar and menu found");
+
+                MenuItem counterItem = currentMenu.findItem(R.id.menu_animals_counter);
+                View actionView = null;
+                if (counterItem != null) {
+                    actionView = counterItem.getActionView();
+                    Log.d("IssueActivity", "animateMenuCounter: Got action view from menu item");
+                } else {
+                    Log.w("IssueActivity", "animateMenuCounter: Menu item not found");
+                }
+                if (actionView != null) {
+                    Log.d("IssueActivity", "animateMenuCounter: actionView found");
+                    TextView counterText = actionView.findViewById(R.id.animals_count);
+                    if (counterText != null) {
+                        Log.d("IssueActivity", "animateMenuCounter: counterText found, current text: " + counterText.getText());
+                        // More prominent pulse animation
+                        ObjectAnimator scaleUpX = ObjectAnimator.ofFloat(counterText, "scaleX", 1.0f, 1.5f);
+                        ObjectAnimator scaleUpY = ObjectAnimator.ofFloat(counterText, "scaleY", 1.0f, 1.5f);
+                        ObjectAnimator scaleDownX = ObjectAnimator.ofFloat(counterText, "scaleX", 1.5f, 1.0f);
+                        ObjectAnimator scaleDownY = ObjectAnimator.ofFloat(counterText, "scaleY", 1.5f, 1.0f);
+
+                        scaleUpX.setDuration(500);
+                        scaleUpY.setDuration(500);
+                        scaleDownX.setDuration(500);
+                        scaleDownY.setDuration(500);
+
+                        scaleDownX.setInterpolator(new OvershootInterpolator());
+                        scaleDownY.setInterpolator(new OvershootInterpolator());
+
+                        AnimatorSet scaleUp = new AnimatorSet();
+                        scaleUp.playTogether(scaleUpX, scaleUpY);
+
+                        AnimatorSet scaleDown = new AnimatorSet();
+                        scaleDown.playTogether(scaleDownX, scaleDownY);
+
+                        AnimatorSet pulseAnimation = new AnimatorSet();
+                        pulseAnimation.playSequentially(scaleUp, scaleDown);
+                        pulseAnimation.start();
+
+                        Log.d("IssueActivity", "Menu counter animation STARTED - should be visible now");
+                    } else {
+                        Log.w("IssueActivity", "animateMenuCounter: counterText NOT found");
+                    }
+                } else {
+                    Log.w("IssueActivity", "animateMenuCounter: actionView NOT found");
+                }
+            } else {
+                Log.w("IssueActivity", "animateMenuCounter: ActionBar NOT found");
+            }
+        } catch (Exception e) {
+            Log.e("IssueActivity", "Error animating menu counter", e);
+        }
+    }
+
+    /**
+     * Check for pending achievements and show celebration dialog (like iOS ImpactManager)
+     */
+    private void checkPendingAchievements() {
+        AchievementManager.PendingAchievement pending = AchievementManager.getInstance().getPendingAchievement();
+        if (pending != null) {
+            Log.d("IssueActivity", "Showing pending achievement: " + pending.title);
+            AchievementCelebrationView.show(this, pending.title, pending.subtitle, pending.icon);
+        }
     }
 }

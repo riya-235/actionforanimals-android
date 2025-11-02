@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:padding="8dp"
+    android:background="@drawable/animals_counter_background"
+    android:clickable="true"
+    android:focusable="true">
+
+    <!-- Animals saved count with green background -->
+    <TextView
+        android:id="@+id/animals_count"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="0"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="@android:color/white"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="4dp"
+        android:background="@drawable/animals_count_background"
+        android:layout_marginEnd="6dp"
+        android:clickable="false"
+        android:focusable="false" />
+
+    <!-- Stars logo -->
+    <ImageView
+        android:id="@+id/stars_logo"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="@drawable/afa_stars"
+        android:scaleType="fitCenter"
+        android:contentDescription="Your Impact"
+        android:clickable="false"
+        android:focusable="false" />
+
+</LinearLayout>

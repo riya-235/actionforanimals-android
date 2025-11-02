@@ -126,14 +126,11 @@
                     android:layout_height="1dp"
                     android:layout_weight="1" />
 
-                <!-- Stars branding -->
-                <ImageView
-                    android:id="@+id/stars_branding"
-                    android:layout_width="64dp"
-                    android:layout_height="48dp"
-                    android:src="@drawable/afa_stars"
-                    android:scaleType="fitCenter"
-                    android:contentDescription="Action for Animals" />
+                <!-- Animals Counter (replaces stars branding) -->
+                <include layout="@layout/animals_counter_view"
+                    android:id="@+id/animals_counter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
 
             </LinearLayout>
 

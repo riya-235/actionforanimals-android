@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Achievement card matching iOS design (140x170dp for two-line titles) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="140dp"
+    android:layout_height="170dp"
+    android:orientation="vertical"
+    android:background="@drawable/achievement_card_background"
+    android:padding="12dp"
+    android:layout_marginEnd="12dp">
+
+    <!-- Icon section (75dp height like iOS) -->
+    <FrameLayout
+        android:layout_width="116dp"
+        android:layout_height="75dp"
+        android:layout_gravity="center_horizontal">
+
+        <!-- Badge icon -->
+        <ImageView
+            android:id="@+id/achievement_icon"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:layout_gravity="center"
+            android:scaleType="fitCenter"
+            android:src="@drawable/badge_first_call" />
+
+        <!-- Lock icon overlay (top-right corner) -->
+        <ImageView
+            android:id="@+id/achievement_lock"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:layout_gravity="top|end"
+            android:src="@drawable/ic_lock_outline_black_24dp"
+            android:visibility="gone"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp" />
+
+    </FrameLayout>
+
+    <!-- Text section (68dp height for two-line titles) -->
+    <LinearLayout
+        android:layout_width="116dp"
+        android:layout_height="68dp"
+        android:layout_gravity="center_horizontal"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:layout_marginTop="4dp">
+
+        <!-- Title -->
+        <TextView
+            android:id="@+id/achievement_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="First Call"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary_modern"
+            android:gravity="center"
+            android:maxLines="2"
+            android:ellipsize="end" />
+
+        <!-- Subtitle -->
+        <TextView
+            android:id="@+id/achievement_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="First phone call"
+            android:textSize="13sp"
+            android:textColor="@color/text_secondary_modern"
+            android:gravity="center"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:layout_marginTop="2dp" />
+
+    </LinearLayout>
+
+</LinearLayout>

@@ -1,12 +1,18 @@
 package org.a5calls.android.a5calls.controller;
 
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.util.Log;
+import android.view.animation.OvershootInterpolator;
 
 import androidx.annotation.Nullable;
 
@@ -26,6 +32,8 @@ import android.util.DisplayMetrics;
 import android.util.Patterns;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
@@ -51,6 +59,9 @@ import org.a5calls.android.a5calls.util.AnalyticsManager;
 import org.a5calls.android.a5calls.util.ScriptReplacements;
 import org.a5calls.android.a5calls.util.MarkdownUtil;
 import org.a5calls.android.a5calls.view.GridItemDecoration;
+import org.a5calls.android.a5calls.view.AnimalsCounterView;
+import org.a5calls.android.a5calls.view.AchievementCelebrationView;
+import org.a5calls.android.a5calls.manager.AchievementManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -76,6 +87,7 @@ public class RepCallActivity extends AppCompatActivity {
     private PopupWindow fieldOfficePopup;
 
     private ActivityRepCallBinding binding;
+
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -121,6 +133,30 @@ public class RepCallActivity extends AppCompatActivity {
     }
 
     @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.menu_rep_call, menu);
+
+        // Get the Animals Counter view from the menu and refresh it
+        MenuItem animalsCounterItem = menu.findItem(R.id.action_animals_counter);
+        if (animalsCounterItem != null) {
+            View actionView = animalsCounterItem.getActionView();
+            if (actionView != null) {
+                // Update the counter display
+                updateAnimalsCounterInActionBar(actionView);
+
+                // Set click listener for Your Impact dialog
+                actionView.setOnClickListener(v -> {
+                    YourImpactDialogFragment dialog = YourImpactDialogFragment.newInstance();
+                    dialog.show(getSupportFragmentManager(), "YourImpactDialog");
+                });
+            }
+        }
+
+        return true;
+    }
+
+    @Override
     protected void onDestroy() {
         AppSingleton.getInstance(getApplicationContext()).getJsonController()
                 .unregisterCallRequestListener(mStatusListener);
@@ -155,6 +191,30 @@ public class RepCallActivity extends AppCompatActivity {
         returnToIssue();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Check for pending achievements (like iOS ImpactManager)
+        checkPendingAchievements();
+
+        // Check if we should pulse the counter (from previous action)
+        if (getIntent().getBooleanExtra("SHOULD_PULSE_COUNTER", false)) {
+            // Clear the flag so it doesn't pulse again
+            getIntent().removeExtra("SHOULD_PULSE_COUNTER");
+
+            // Short delay to ensure menu is ready but feel connected to the action
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                animateMenuCounter();
+            }, 300);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+    }
+
     private void setupApiListener() {
         mStatusListener = new FiveCallsApi.CallRequestListener() {
             @Override
@@ -179,6 +239,146 @@ public class RepCallActivity extends AppCompatActivity {
         };
         AppSingleton.getInstance(getApplicationContext())
                 .getJsonController().registerCallRequestListener(mStatusListener);
+    }
+
+    private void triggerAnimalsCounterIncrement() {
+        Log.d("RepCallActivity", "triggerAnimalsCounterIncrement called");
+        runOnUiThread(() -> {
+            Log.d("RepCallActivity", "Triggering counter feedback directly");
+
+            // Trigger haptic feedback
+            triggerHapticFeedback();
+
+            // Play success sound
+            playSuccessSound();
+
+            // Don't animate counter here since we're navigating away immediately
+            // The destination screen will handle the pulse animation
+
+            // Check for achievements based on total animals helped
+            checkForAchievements();
+        });
+    }
+
+    private void triggerHapticFeedback() {
+        try {
+            Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            if (vibrator != null && vibrator.hasVibrator()) {
+                // Use impact feedback pattern similar to iOS success haptic
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    VibrationEffect effect = VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE);
+                    vibrator.vibrate(effect);
+                } else {
+                    vibrator.vibrate(50);
+                }
+                Log.d("RepCallActivity", "Haptic feedback triggered");
+            }
+        } catch (Exception e) {
+            Log.e("RepCallActivity", "Error triggering haptic feedback", e);
+        }
+    }
+
+    private void playSuccessSound() {
+        try {
+            // Try multiple sound sources for better compatibility
+            MediaPlayer mediaPlayer = null;
+
+            // First try default notification sound
+            try {
+                mediaPlayer = MediaPlayer.create(this, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI);
+            } catch (Exception e) {
+                Log.d("RepCallActivity", "Default notification URI failed: " + e.getMessage());
+            }
+
+            // Fallback to ringtone sound if notification failed
+            if (mediaPlayer == null) {
+                try {
+                    mediaPlayer = MediaPlayer.create(this, android.provider.Settings.System.DEFAULT_RINGTONE_URI);
+                } catch (Exception e) {
+                    Log.d("RepCallActivity", "Default ringtone URI failed: " + e.getMessage());
+                }
+            }
+
+            if (mediaPlayer != null) {
+                mediaPlayer.setOnCompletionListener(mp -> {
+                    mp.release();
+                });
+                mediaPlayer.setOnErrorListener((mp, what, extra) -> {
+                    Log.e("RepCallActivity", "MediaPlayer error: " + what + ", " + extra);
+                    mp.release();
+                    return true; // Handle error
+                });
+                mediaPlayer.start();
+                Log.d("RepCallActivity", "Success sound played");
+            } else {
+                Log.w("RepCallActivity", "No system sounds available, skipping sound");
+            }
+        } catch (Exception e) {
+            Log.e("RepCallActivity", "Error playing success sound", e);
+        }
+    }
+
+    private void animateMenuCounter() {
+        try {
+            // Find the counter view in the menu
+            if (getSupportActionBar() != null) {
+                View actionView = findViewById(R.id.action_animals_counter);
+                if (actionView != null) {
+                    TextView counterText = actionView.findViewById(R.id.animals_count);
+                    if (counterText != null) {
+                        // More prominent pulse animation
+                        ObjectAnimator scaleUpX = ObjectAnimator.ofFloat(counterText, "scaleX", 1.0f, 1.5f);
+                        ObjectAnimator scaleUpY = ObjectAnimator.ofFloat(counterText, "scaleY", 1.0f, 1.5f);
+                        ObjectAnimator scaleDownX = ObjectAnimator.ofFloat(counterText, "scaleX", 1.5f, 1.0f);
+                        ObjectAnimator scaleDownY = ObjectAnimator.ofFloat(counterText, "scaleY", 1.5f, 1.0f);
+
+                        scaleUpX.setDuration(500);
+                        scaleUpY.setDuration(500);
+                        scaleDownX.setDuration(500);
+                        scaleDownY.setDuration(500);
+
+                        scaleDownX.setInterpolator(new OvershootInterpolator());
+                        scaleDownY.setInterpolator(new OvershootInterpolator());
+
+                        AnimatorSet scaleUp = new AnimatorSet();
+                        scaleUp.playTogether(scaleUpX, scaleUpY);
+
+                        AnimatorSet scaleDown = new AnimatorSet();
+                        scaleDown.playTogether(scaleDownX, scaleDownY);
+
+                        AnimatorSet pulseAnimation = new AnimatorSet();
+                        pulseAnimation.playSequentially(scaleUp, scaleDown);
+                        pulseAnimation.start();
+
+                        Log.d("RepCallActivity", "Menu counter animation triggered");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e("RepCallActivity", "Error animating menu counter", e);
+        }
+    }
+
+    private void checkForAchievements() {
+        // Achievement checking is now handled automatically in DatabaseHelper.addCall()
+        // The achievement system will show celebrations for newly unlocked achievements
+        Log.d("RepCallActivity", "Achievement checking handled by DatabaseHelper achievement system");
+    }
+
+    /**
+     * Updates the animals counter display in the action bar
+     */
+    private void updateAnimalsCounterInActionBar(View actionView) {
+        try {
+            TextView animalsCountTextView = actionView.findViewById(R.id.animals_count);
+            if (animalsCountTextView != null) {
+                DatabaseHelper db = AppSingleton.getInstance(this).getDatabaseHelper();
+                int totalAnimalsHelped = db.getTotalAnimalsHelped();
+                animalsCountTextView.setText(String.valueOf(totalAnimalsHelped));
+            }
+        } catch (Exception e) {
+            Log.e("RepCallActivity", "Error updating animals counter", e);
+        }
     }
 
     private void setupIssueTitle() {
@@ -421,10 +621,14 @@ public class RepCallActivity extends AppCompatActivity {
 
 
     private void reportCall(Outcome outcome, String address) {
+        // Trigger immediate feedback (pulse, haptic, sound) before server call
+        triggerAnimalsCounterIncrement();
+
         outcomeAdapter.setEnabled(false);
+        String categories = DatabaseHelper.categoriesToString(mIssue.categories);
         AppSingleton.getInstance(getApplicationContext()).getDatabaseHelper().addCall(mIssue.id,
                 mIssue.name, mIssue.contacts.get(mActiveContactIndex).id,
-                mIssue.contacts.get(mActiveContactIndex).name, outcome.status.toString(), address);
+                mIssue.contacts.get(mActiveContactIndex).name, outcome.status.toString(), address, mIssue.animalsHelpedPerAction, categories, DatabaseHelper.ActionTypes.CALL);
         AppSingleton.getInstance(getApplicationContext()).getJsonController().reportCall(
                 mIssue.id, mIssue.contacts.get(mActiveContactIndex).id, outcome.label, address);
     }
@@ -432,12 +636,15 @@ public class RepCallActivity extends AppCompatActivity {
     private void navigateToNextContactOrComplete() {
         // Find the next contact in the list
         int nextContactIndex = findNextContact();
+        Log.d("RepCallActivity", "navigateToNextContactOrComplete: nextContactIndex = " + nextContactIndex);
 
         if (nextContactIndex != -1) {
             // Navigate to next contact
+            Log.d("RepCallActivity", "navigateToNextContactOrComplete: Launching next contact at index " + nextContactIndex);
             launchNextContact(nextContactIndex);
         } else {
             // No more contacts, return to issue list
+            Log.d("RepCallActivity", "navigateToNextContactOrComplete: No more contacts, calling returnToIssue()");
             returnToIssue();
         }
     }
@@ -459,6 +666,7 @@ public class RepCallActivity extends AppCompatActivity {
         intent.putExtra(KEY_ACTIVE_CONTACT_INDEX, nextContactIndex);
         intent.putExtra(KEY_ADDRESS, getIntent().getStringExtra(KEY_ADDRESS));
         intent.putExtra(KEY_LOCATION_NAME, getIntent().getStringExtra(KEY_LOCATION_NAME));
+        intent.putExtra("SHOULD_PULSE_COUNTER", true);
 
         // Copy over other extras that might be needed
         if (getIntent().hasExtra(IssueActivity.KEY_IS_LOW_ACCURACY)) {
@@ -481,12 +689,24 @@ public class RepCallActivity extends AppCompatActivity {
         if (isFinishing()) {
             return;
         }
-        Intent upIntent = NavUtils.getParentActivityIntent(this);
-        if (upIntent == null) {
-            return;
+
+        // Launch IssueActivity with pulse flag (same pattern as launchNextContact)
+        Intent intent = new Intent(this, IssueActivity.class);
+        intent.putExtra(IssueActivity.KEY_ISSUE, mIssue);
+        intent.putExtra("SHOULD_PULSE_COUNTER", true);
+        Log.d("RepCallActivity", "returnToIssue: Setting SHOULD_PULSE_COUNTER = true in intent");
+
+        // Copy important flags
+        if (getIntent().hasExtra(IssueActivity.KEY_IS_LOW_ACCURACY)) {
+            intent.putExtra(IssueActivity.KEY_IS_LOW_ACCURACY,
+                    getIntent().getBooleanExtra(IssueActivity.KEY_IS_LOW_ACCURACY, false));
         }
-        upIntent.putExtra(IssueActivity.KEY_ISSUE, mIssue);
-        setResult(IssueActivity.RESULT_OK, upIntent);
+        if (getIntent().hasExtra(IssueActivity.KEY_DONATE_IS_ON)) {
+            intent.putExtra(IssueActivity.KEY_DONATE_IS_ON,
+                    getIntent().getBooleanExtra(IssueActivity.KEY_DONATE_IS_ON, false));
+        }
+
+        startActivity(intent);
         finish();
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
@@ -510,5 +730,16 @@ public class RepCallActivity extends AppCompatActivity {
         Linkify.addLinks(textView, Patterns.PHONE, "tel:",
                 Linkify.sPhoneNumberMatchFilter,
                 Linkify.sPhoneNumberTransformFilter);
+    }
+
+    /**
+     * Check for pending achievements and show celebration dialog (like iOS ImpactManager)
+     */
+    private void checkPendingAchievements() {
+        AchievementManager.PendingAchievement pending = AchievementManager.getInstance().getPendingAchievement();
+        if (pending != null) {
+            Log.d("RepCallActivity", "Showing pending achievement: " + pending.title);
+            AchievementCelebrationView.show(this, pending.title, pending.subtitle, pending.icon);
+        }
     }
 }

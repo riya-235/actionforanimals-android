@@ -52,6 +52,7 @@ import org.a5calls.android.a5calls.util.AnalyticsManager;
 import org.a5calls.android.a5calls.util.ScriptReplacements;
 import org.a5calls.android.a5calls.util.MarkdownUtil;
 import org.a5calls.android.a5calls.view.GridItemDecoration;
+import org.a5calls.android.a5calls.view.AnimalsCounterView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -167,10 +168,20 @@ public class CorporateCallActivity extends AppCompatActivity {
             @Override
             public void onCallReported() {
                 // Don't automatically return to issue - let navigation logic handle it
+
+                // Trigger animals counter animation with sound and haptic feedback
+                triggerAnimalsCounterIncrement();
             }
         };
         AppSingleton.getInstance(getApplicationContext())
                 .getJsonController().registerCallRequestListener(mStatusListener);
+    }
+
+    private void triggerAnimalsCounterIncrement() {
+        // Use the static method to trigger animation on any active counter
+        runOnUiThread(() -> {
+            AnimalsCounterView.triggerIncrementAnimation();
+        });
     }
 
     private void setupIssueTitle() {
@@ -288,8 +299,9 @@ public class CorporateCallActivity extends AppCompatActivity {
         String contactId = target.id != null ? target.id : target.name;
         String contactName = target.name;
         
+        String categories = DatabaseHelper.categoriesToString(mIssue.categories);
         AppSingleton.getInstance(getApplicationContext()).getDatabaseHelper().addCall(mIssue.id,
-                mIssue.name, contactId, contactName, outcome.status.toString(), address);
+                mIssue.name, contactId, contactName, outcome.status.toString(), address, mIssue.animalsHelpedPerAction, categories, DatabaseHelper.ActionTypes.CALL);
         AppSingleton.getInstance(getApplicationContext()).getJsonController().reportCall(
                 mIssue.id, contactId, outcome.label, address);
     }

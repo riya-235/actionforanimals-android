@@ -1,8 +1,19 @@
 package org.a5calls.android.a5calls.controller;
 
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
+import android.content.Context;
 import android.content.Intent;
+import android.media.MediaPlayer;
 import android.os.Bundle;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.util.Log;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
+import android.view.animation.OvershootInterpolator;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -15,9 +26,13 @@ import androidx.recyclerview.widget.RecyclerView;
 import org.a5calls.android.a5calls.R;
 import org.a5calls.android.a5calls.AppSingleton;
 import org.a5calls.android.a5calls.model.AccountManager;
+import org.a5calls.android.a5calls.model.DatabaseHelper;
 import org.a5calls.android.a5calls.model.Issue;
 import org.a5calls.android.a5calls.model.Target;
 import org.a5calls.android.a5calls.util.ScriptReplacements;
+import org.a5calls.android.a5calls.view.AnimalsCounterView;
+import org.a5calls.android.a5calls.view.AchievementCelebrationView;
+import org.a5calls.android.a5calls.manager.AchievementManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +46,8 @@ public class EmailComposerActivity extends AppCompatActivity {
     private Issue mIssue;
     private List<Target> mTargets;
     private boolean mIsBatchEmail;
-    
+
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -111,6 +127,14 @@ public class EmailComposerActivity extends AppCompatActivity {
     
     private void onActionButtonClick(String action) {
         trackEmailAction(action);
+
+        // Set result to indicate we should pulse the counter on return
+        Intent resultIntent = new Intent();
+        resultIntent.putExtra("SHOULD_PULSE_COUNTER", true);
+        setResult(RESULT_OK, resultIntent);
+
+        Log.d("EmailComposerActivity", "onActionButtonClick: Setting result with SHOULD_PULSE_COUNTER = true");
+
         finish();
     }
     
@@ -250,18 +274,202 @@ public class EmailComposerActivity extends AppCompatActivity {
                 }
             }
             
+            String categories = DatabaseHelper.categoriesToString(mIssue.categories);
             AppSingleton.getInstance(getApplicationContext()).getDatabaseHelper().addCall(
-                mIssue.id, mIssue.name, contactId, contactName, "contact", "email");
+                mIssue.id, mIssue.name, contactId, contactName, "contact", "email", mIssue.animalsHelpedPerAction, categories, DatabaseHelper.ActionTypes.EMAIL);
             
             // Report to the server (same as calls)
             AppSingleton.getInstance(getApplicationContext()).getJsonController().reportCall(
                 mIssue.id, contactId, "contact", "email");
+
+            // Trigger haptic feedback and sound directly (like iOS)
+            triggerAnimalsCounterIncrement();
         }
     }
-    
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Check for pending achievements (like iOS ImpactManager)
+        checkPendingAchievements();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.menu_email_composer, menu);
+
+        // Set up the animals counter in the action bar
+        MenuItem counterItem = menu.findItem(R.id.menu_animals_counter);
+        if (counterItem != null) {
+            View actionView = counterItem.getActionView();
+            if (actionView != null) {
+                // Update the counter display
+                updateAnimalsCounterInActionBar(actionView);
+
+                // The action view is the animals counter layout
+                actionView.setOnClickListener(v -> {
+                    // Open Your Impact dialog when counter is clicked
+                    YourImpactDialogFragment dialog = YourImpactDialogFragment.newInstance();
+                    dialog.show(getSupportFragmentManager(), "YourImpactDialog");
+                });
+            }
+        }
+
+        return true;
+    }
+
     @Override
     public boolean onSupportNavigateUp() {
         onBackPressed();
         return true;
+    }
+
+    /**
+     * Updates the animals counter display in the action bar
+     */
+    private void updateAnimalsCounterInActionBar(View actionView) {
+        try {
+            TextView animalsCountTextView = actionView.findViewById(R.id.animals_count);
+            if (animalsCountTextView != null) {
+                DatabaseHelper db = AppSingleton.getInstance(this).getDatabaseHelper();
+                int totalAnimalsHelped = db.getTotalAnimalsHelped();
+                animalsCountTextView.setText(String.valueOf(totalAnimalsHelped));
+            }
+        } catch (Exception e) {
+            Log.e("EmailComposerActivity", "Error updating animals counter", e);
+        }
+    }
+
+    private void triggerAnimalsCounterIncrement() {
+        Log.d("EmailComposerActivity", "triggerAnimalsCounterIncrement called");
+        runOnUiThread(() -> {
+            Log.d("EmailComposerActivity", "Triggering counter feedback directly");
+
+            // Trigger haptic feedback
+            triggerHapticFeedback();
+
+            // Play success sound
+            playSuccessSound();
+
+            // Don't animate counter here since we're navigating away immediately
+            // The destination screen will handle the pulse animation
+        });
+    }
+
+    private void triggerHapticFeedback() {
+        try {
+            Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            if (vibrator != null && vibrator.hasVibrator()) {
+                // Use impact feedback pattern similar to iOS success haptic
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    VibrationEffect effect = VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE);
+                    vibrator.vibrate(effect);
+                } else {
+                    vibrator.vibrate(50);
+                }
+                Log.d("EmailComposerActivity", "Haptic feedback triggered");
+            }
+        } catch (Exception e) {
+            Log.e("EmailComposerActivity", "Error triggering haptic feedback", e);
+        }
+    }
+
+    private void playSuccessSound() {
+        try {
+            // Try multiple sound sources for better compatibility
+            MediaPlayer mediaPlayer = null;
+
+            // First try default notification sound
+            try {
+                mediaPlayer = MediaPlayer.create(this, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI);
+            } catch (Exception e) {
+                Log.d("EmailComposerActivity", "Default notification URI failed: " + e.getMessage());
+            }
+
+            // Fallback to ringtone sound if notification failed
+            if (mediaPlayer == null) {
+                try {
+                    mediaPlayer = MediaPlayer.create(this, android.provider.Settings.System.DEFAULT_RINGTONE_URI);
+                } catch (Exception e) {
+                    Log.d("EmailComposerActivity", "Default ringtone URI failed: " + e.getMessage());
+                }
+            }
+
+            if (mediaPlayer != null) {
+                mediaPlayer.setOnCompletionListener(mp -> {
+                    mp.release();
+                });
+                mediaPlayer.setOnErrorListener((mp, what, extra) -> {
+                    Log.e("EmailComposerActivity", "MediaPlayer error: " + what + ", " + extra);
+                    mp.release();
+                    return true; // Handle error
+                });
+                mediaPlayer.start();
+                Log.d("EmailComposerActivity", "Success sound played");
+            } else {
+                Log.w("EmailComposerActivity", "No system sounds available, skipping sound");
+            }
+        } catch (Exception e) {
+            Log.e("EmailComposerActivity", "Error playing success sound", e);
+        }
+    }
+
+    private void animateMenuCounter() {
+        try {
+            // Find the counter view in the menu
+            if (getSupportActionBar() != null) {
+                View actionView = findViewById(R.id.action_animals_counter);
+                if (actionView != null) {
+                    TextView counterText = actionView.findViewById(R.id.animals_count);
+                    if (counterText != null) {
+                        // More prominent pulse animation
+                        ObjectAnimator scaleUpX = ObjectAnimator.ofFloat(counterText, "scaleX", 1.0f, 1.5f);
+                        ObjectAnimator scaleUpY = ObjectAnimator.ofFloat(counterText, "scaleY", 1.0f, 1.5f);
+                        ObjectAnimator scaleDownX = ObjectAnimator.ofFloat(counterText, "scaleX", 1.5f, 1.0f);
+                        ObjectAnimator scaleDownY = ObjectAnimator.ofFloat(counterText, "scaleY", 1.5f, 1.0f);
+
+                        scaleUpX.setDuration(500);
+                        scaleUpY.setDuration(500);
+                        scaleDownX.setDuration(500);
+                        scaleDownY.setDuration(500);
+
+                        scaleDownX.setInterpolator(new OvershootInterpolator());
+                        scaleDownY.setInterpolator(new OvershootInterpolator());
+
+                        AnimatorSet scaleUp = new AnimatorSet();
+                        scaleUp.playTogether(scaleUpX, scaleUpY);
+
+                        AnimatorSet scaleDown = new AnimatorSet();
+                        scaleDown.playTogether(scaleDownX, scaleDownY);
+
+                        AnimatorSet pulseAnimation = new AnimatorSet();
+                        pulseAnimation.playSequentially(scaleUp, scaleDown);
+                        pulseAnimation.start();
+
+                        Log.d("EmailComposerActivity", "Menu counter animation triggered");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e("EmailComposerActivity", "Error animating menu counter", e);
+        }
+    }
+
+    /**
+     * Check for pending achievements and show celebration dialog (like iOS ImpactManager)
+     */
+    private void checkPendingAchievements() {
+        AchievementManager.PendingAchievement pending = AchievementManager.getInstance().getPendingAchievement();
+        if (pending != null) {
+            Log.d("EmailComposerActivity", "Showing pending achievement: " + pending.title);
+            AchievementCelebrationView.show(this, pending.title, pending.subtitle, pending.icon);
+        }
     }
 }

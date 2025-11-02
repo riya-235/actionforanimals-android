@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#CC000000"
+    android:gravity="center">
+
+    <!-- iOS-style card container -->
+    <LinearLayout
+        android:layout_width="280dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/achievement_celebration_background"
+        android:elevation="16dp"
+        android:padding="32dp"
+        android:gravity="center"
+        android:layout_centerInParent="true">
+
+        <!-- Large celebration icon with background circle -->
+        <RelativeLayout
+            android:layout_width="100dp"
+            android:layout_height="100dp"
+            android:layout_marginBottom="24dp">
+
+            <!-- Background circle for icon -->
+            <View
+                android:layout_width="100dp"
+                android:layout_height="100dp"
+                android:background="@drawable/achievement_icon_background"
+                android:layout_centerInParent="true" />
+
+            <!-- Achievement Icon -->
+            <ImageView
+                android:id="@+id/achievement_icon"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:src="@drawable/badge_first_call"
+                android:scaleType="fitCenter"
+                android:layout_centerInParent="true"
+                android:contentDescription="Achievement icon" />
+        </RelativeLayout>
+
+        <!-- Achievement Title -->
+        <TextView
+            android:id="@+id/achievement_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Achievement Unlocked!"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:gravity="center"
+            android:layout_marginBottom="8dp"
+            android:fontFamily="sans-serif-medium" />
+
+        <!-- Achievement Subtitle -->
+        <TextView
+            android:id="@+id/achievement_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="You've reached a milestone"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:gravity="center"
+            android:layout_marginBottom="24dp"
+            android:lineSpacingExtra="2dp" />
+
+        <!-- Celebration sparkles/confetti indicator -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🎉"
+            android:textSize="24sp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Tap to dismiss hint -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Tap to continue"
+            android:textSize="11sp"
+            android:textColor="#999999"
+            android:alpha="0.8" />
+
+    </LinearLayout>
+
+</RelativeLayout>

@@ -9,6 +9,7 @@
         android:required="false"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:name=".FiveCallsApplication"
@@ -69,13 +70,6 @@
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".controller.SettingsActivity" />
-        </activity>
-        <activity android:name=".controller.StatsActivity"
-            android:label="@string/stats_activity"
-            android:parentActivityName=".controller.MainActivity">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".controller.MainActivity" />
         </activity>
         <activity android:name=".controller.EmailComposerActivity"
             android:parentActivityName=".controller.IssueActivity">

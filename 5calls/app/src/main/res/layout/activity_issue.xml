@@ -34,6 +34,48 @@
             android:lineSpacingExtra="4dp"
             android:paddingBottom="16dp" />
 
+        <!-- Impact Preview Section -->
+        <LinearLayout
+            android:id="@+id/impact_preview_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingBottom="20dp">
+
+            <!-- Heart icon -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="❤️"
+                android:textSize="14sp"
+                android:layout_marginEnd="8dp" />
+
+            <!-- Impact text -->
+            <TextView
+                android:id="@+id/impact_preview_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Take action, help save 1 animals"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary_modern" />
+
+            <!-- Info icon -->
+            <ImageView
+                android:id="@+id/impact_info_icon"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:src="@drawable/ic_info"
+                android:tint="#999999"
+                android:layout_marginStart="8dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:padding="8dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:contentDescription="Impact info" />
+
+        </LinearLayout>
+
         <!-- Location Setup Section (shown when no location is set for political campaigns) -->
         <LinearLayout
             android:id="@+id/location_setup_section"

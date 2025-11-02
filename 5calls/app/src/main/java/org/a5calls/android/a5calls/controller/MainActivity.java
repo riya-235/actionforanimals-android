@@ -2,8 +2,11 @@ package org.a5calls.android.a5calls.controller;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.google.android.material.navigation.NavigationView;
 
@@ -59,6 +62,9 @@ import org.a5calls.android.a5calls.model.Issue;
 import org.a5calls.android.a5calls.util.AnalyticsManager;
 import org.a5calls.android.a5calls.util.CustomTabsUtil;
 import org.a5calls.android.a5calls.util.ContentChangeManager;
+import org.a5calls.android.a5calls.model.DatabaseHelper;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -94,6 +100,12 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
     private boolean mIsLowAccuracy = false;
     private boolean mDonateIsOn = false;
     private FirebaseAuth mAuth = null;
+
+    // Discovery hint for new counter feature (like iOS)
+    private boolean showDiscoveryHint = false;
+    private Handler discoveryHandler;
+    private Runnable discoveryPulseRunnable;
+    private Handler autoStopHandler;
     private boolean wasInBackground = true; // Start as true so first launch refreshes from server
 
     private ActivityMainBinding binding;
@@ -316,6 +328,31 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
             binding.newsletterSignupView.setVisibility(View.GONE);
         }
 
+        // Setup animals counter
+        LinearLayout animalsCounter = findViewById(R.id.animals_counter);
+        TextView animalsCountText = findViewById(R.id.animals_count);
+        Log.d("MainActivity", "Animals counter found: " + (animalsCounter != null) + ", count text: " + (animalsCountText != null));
+
+        if (animalsCounter != null && animalsCountText != null) {
+            // Update count
+            DatabaseHelper db = AppSingleton.getInstance(this).getDatabaseHelper();
+            int totalAnimalsHelped = db.getTotalAnimalsHelped();
+            animalsCountText.setText(String.valueOf(totalAnimalsHelped));
+
+            // Set click listener
+            animalsCounter.setOnClickListener(v -> {
+                Log.d("MainActivity", "Animals counter clicked!");
+
+                // Stop discovery hint if it's showing (iOS: Mark as seen when tapped)
+                if (showDiscoveryHint) {
+                    stopDiscoveryHint();
+                }
+
+                YourImpactDialogFragment dialog = YourImpactDialogFragment.newInstance();
+                dialog.show(getSupportFragmentManager(), "YourImpactDialog");
+            });
+        }
+
         // Only refresh from server if app was actually backgrounded OR if we have no data
         int itemCount = mIssuesAdapter.getItemCount();
         Log.d("MainActivity", "onResume - wasInBackground: " + wasInBackground + ", itemCount: " + itemCount);
@@ -346,6 +383,9 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
                 showLocationBottomSheet();
             });
         }
+
+        // Check for discovery hint on main screen (like iOS)
+        checkForDiscoveryHint();
     }
 
     @Override
@@ -859,5 +899,107 @@ public class MainActivity extends AppCompatActivity implements IssuesAdapter.Cal
                 // Don't set wasInBackground = false here, let onResume handle the logic
             }
         });
+    }
+
+    // Discovery hint methods for animals counter (matching iOS implementation)
+    private void checkForDiscoveryHint() {
+        SharedPreferences prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE);
+        boolean hasSeenCounter = prefs.getBoolean("hasSeenImpactCounter", false);
+
+        if (!hasSeenCounter) {
+            // Initialize handlers
+            if (discoveryHandler == null) {
+                discoveryHandler = new Handler(Looper.getMainLooper());
+            }
+            if (autoStopHandler == null) {
+                autoStopHandler = new Handler(Looper.getMainLooper());
+            }
+
+            // Start discovery hint immediately
+            startDiscoveryHint();
+
+            // Auto-hide after 30 seconds if not tapped (iOS: 30.0 seconds)
+            autoStopHandler.postDelayed(() -> {
+                if (showDiscoveryHint) {
+                    stopDiscoveryHint();
+                }
+            }, 30000);
+        }
+    }
+
+    private void startDiscoveryHint() {
+        if (!showDiscoveryHint) {
+            showDiscoveryHint = true;
+
+            // Start pulsing animation (iOS: Timer.scheduledTimer(withTimeInterval: 1.2))
+            if (discoveryPulseRunnable == null) {
+                discoveryPulseRunnable = new Runnable() {
+                    private boolean scaleUp = true;
+
+                    @Override
+                    public void run() {
+                        View animalsCounter = findViewById(R.id.animals_counter);
+                        if (animalsCounter != null && showDiscoveryHint) {
+                            // Animate scale (iOS: pulseScale = pulseScale == 1.0 ? 1.1 : 1.0)
+                            float targetScale = scaleUp ? 1.1f : 1.0f;
+                            animalsCounter.animate()
+                                .scaleX(targetScale)
+                                .scaleY(targetScale)
+                                .setDuration(600) // iOS: duration: 0.6
+                                .withEndAction(() -> {
+                                    scaleUp = !scaleUp;
+                                    if (showDiscoveryHint && discoveryHandler != null) {
+                                        discoveryHandler.postDelayed(this, 1200); // iOS: withTimeInterval: 1.2
+                                    }
+                                });
+                        }
+                    }
+                };
+            }
+
+            // Add green glow effect (iOS: Color.afaGreen stroke)
+            View animalsCounter = findViewById(R.id.animals_counter);
+            if (animalsCounter != null) {
+                // Add green background to simulate glow
+                animalsCounter.setBackgroundResource(R.drawable.discovery_hint_background);
+
+                // Start the pulsing animation
+                if (discoveryHandler != null) {
+                    discoveryHandler.post(discoveryPulseRunnable);
+                }
+            }
+        }
+    }
+
+    private void stopDiscoveryHint() {
+        // Save that user has seen the counter (iOS: UserDefaults.standard.set(true, forKey: "hasSeenImpactCounter"))
+        SharedPreferences prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.putBoolean("hasSeenImpactCounter", true);
+        editor.apply();
+
+        // Stop the pulsing animation
+        if (discoveryHandler != null) {
+            discoveryHandler.removeCallbacks(discoveryPulseRunnable);
+        }
+        if (autoStopHandler != null) {
+            autoStopHandler.removeCallbacksAndMessages(null);
+        }
+
+        // Reset scale and hide hint (iOS: pulseScale = 1.0, showDiscoveryHint = false)
+        View animalsCounter = findViewById(R.id.animals_counter);
+        if (animalsCounter != null) {
+            animalsCounter.animate()
+                .scaleX(1.0f)
+                .scaleY(1.0f)
+                .setDuration(300) // iOS: duration: 0.3
+                .withEndAction(() -> {
+                    // Restore original background instead of removing it
+                    animalsCounter.setBackgroundResource(R.drawable.animals_counter_background);
+                    showDiscoveryHint = false;
+                });
+        } else {
+            showDiscoveryHint = false;
+        }
     }
 }

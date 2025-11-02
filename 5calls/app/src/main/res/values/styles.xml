@@ -882,4 +882,10 @@
         <item name="boxStrokeColor">@color/outline</item>
     </style>
 
+    <!-- Dialog slide animation style -->
+    <style name="DialogSlideAnimation">
+        <item name="android:windowEnterAnimation">@anim/slide_in_bottom</item>
+        <item name="android:windowExitAnimation">@anim/slide_out_bottom</item>
+    </style>
+
 </resources>

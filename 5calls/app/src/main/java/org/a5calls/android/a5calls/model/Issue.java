@@ -3,6 +3,8 @@ package org.a5calls.android.a5calls.model;
 import android.os.Parcel;
 import android.os.Parcelable;
 
+import com.google.gson.annotations.SerializedName;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -33,6 +35,10 @@ public class Issue implements Parcelable {
     public List<Target> targets;
     public CorporateInfo corporateInfo;
 
+    // Animals impact tracking
+    @SerializedName("animalsHelped")
+    public int animalsHelpedPerAction = 1; // Default to 1 if not specified
+
     protected Issue(Parcel in) {
         id = in.readString();
         name = in.readString();
@@ -52,6 +58,7 @@ public class Issue implements Parcelable {
         stats = IssueStats.CREATOR.createFromParcel(in);
         targets = in.createTypedArrayList(Target.CREATOR);
         corporateInfo = in.readParcelable(CorporateInfo.class.getClassLoader());
+        animalsHelpedPerAction = in.readInt();
     }
 
     public static final Creator<Issue> CREATOR = new Creator<Issue>() {
@@ -91,6 +98,7 @@ public class Issue implements Parcelable {
         stats.writeToParcel(dest, flags);
         dest.writeTypedList(targets);
         dest.writeParcelable(corporateInfo, flags);
+        dest.writeInt(animalsHelpedPerAction);
     }
 
     /**
