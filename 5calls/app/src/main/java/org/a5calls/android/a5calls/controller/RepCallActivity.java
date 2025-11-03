@@ -51,6 +51,7 @@ import org.a5calls.android.a5calls.databinding.ActivityRepCallBinding;
 import org.a5calls.android.a5calls.model.AccountManager;
 import org.a5calls.android.a5calls.model.Contact;
 import org.a5calls.android.a5calls.model.DatabaseHelper;
+import org.a5calls.android.a5calls.model.AchievementManager;
 import org.a5calls.android.a5calls.model.FieldOffice;
 import org.a5calls.android.a5calls.model.Issue;
 import org.a5calls.android.a5calls.model.Outcome;
@@ -61,7 +62,6 @@ import org.a5calls.android.a5calls.util.MarkdownUtil;
 import org.a5calls.android.a5calls.view.GridItemDecoration;
 import org.a5calls.android.a5calls.view.AnimalsCounterView;
 import org.a5calls.android.a5calls.view.AchievementCelebrationView;
-import org.a5calls.android.a5calls.manager.AchievementManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -179,7 +179,7 @@ public class RepCallActivity extends AppCompatActivity {
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
             case android.R.id.home:
-                returnToIssue();
+                returnToIssueWithoutPulse(); // Skip - no action taken
                 return true;
         }
         return super.onOptionsItemSelected(item);
@@ -188,7 +188,7 @@ public class RepCallActivity extends AppCompatActivity {
     @Override
     public void onBackPressed() {
         super.onBackPressed();
-        returnToIssue();
+        returnToIssueWithoutPulse(); // Skip - no action taken
     }
 
     @Override
@@ -213,6 +213,27 @@ public class RepCallActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == 100) { // Request code from launchNextContact
+            Log.d("RepCallActivity", "onActivityResult: Got result " + resultCode + " from next RepCallActivity");
+
+            // Forward the result from the next activity back to IssueActivity
+            if (data != null) {
+                setResult(resultCode, data);
+                Log.d("RepCallActivity", "onActivityResult: Forwarding result " + resultCode + " with data to IssueActivity");
+            } else {
+                setResult(resultCode);
+                Log.d("RepCallActivity", "onActivityResult: Forwarding result " + resultCode + " without data to IssueActivity");
+            }
+
+            // Finish this activity so the result propagates
+            finish();
+        }
     }
 
     private void setupApiListener() {
@@ -360,9 +381,8 @@ public class RepCallActivity extends AppCompatActivity {
     }
 
     private void checkForAchievements() {
-        // Achievement checking is now handled automatically in DatabaseHelper.addCall()
-        // The achievement system will show celebrations for newly unlocked achievements
-        Log.d("RepCallActivity", "Achievement checking handled by DatabaseHelper achievement system");
+        // Achievement checking now handled by AchievementManager after database operations
+        // Celebrations are triggered automatically when achievements are unlocked
     }
 
     /**
@@ -578,12 +598,12 @@ public class RepCallActivity extends AppCompatActivity {
             @Override
             public void onOutcomeClicked(Outcome outcome) {
                 if (outcome.status == Outcome.Status.SKIP) {
-                    // Skip doesn't send anything to backend, just navigate to next
-                    navigateToNextContactOrComplete();
+                    // Skip doesn't send anything to backend, just navigate to next without pulsing
+                    navigateToNextContactOrComplete(false);
                 } else {
-                    // Normal outcomes report the call and then navigate
+                    // Normal outcomes report the call and then navigate with pulsing
                     reportCall(outcome, address);
-                    navigateToNextContactOrComplete();
+                    navigateToNextContactOrComplete(true);
                 }
             }
         });
@@ -621,6 +641,8 @@ public class RepCallActivity extends AppCompatActivity {
 
 
     private void reportCall(Outcome outcome, String address) {
+        Log.d("RepCallActivity", "reportCall: Taking action with outcome: " + outcome.status);
+
         // Trigger immediate feedback (pulse, haptic, sound) before server call
         triggerAnimalsCounterIncrement();
 
@@ -629,23 +651,27 @@ public class RepCallActivity extends AppCompatActivity {
         AppSingleton.getInstance(getApplicationContext()).getDatabaseHelper().addCall(mIssue.id,
                 mIssue.name, mIssue.contacts.get(mActiveContactIndex).id,
                 mIssue.contacts.get(mActiveContactIndex).name, outcome.status.toString(), address, mIssue.animalsHelpedPerAction, categories, DatabaseHelper.ActionTypes.CALL);
+
+        // Check for newly unlocked achievements
+        AchievementManager.getInstance(this).checkAfterAction("call", mIssue.animalsHelpedPerAction, categories);
+
         AppSingleton.getInstance(getApplicationContext()).getJsonController().reportCall(
                 mIssue.id, mIssue.contacts.get(mActiveContactIndex).id, outcome.label, address);
     }
 
-    private void navigateToNextContactOrComplete() {
+    private void navigateToNextContactOrComplete(boolean shouldPulse) {
         // Find the next contact in the list
         int nextContactIndex = findNextContact();
-        Log.d("RepCallActivity", "navigateToNextContactOrComplete: nextContactIndex = " + nextContactIndex);
+        Log.d("RepCallActivity", "navigateToNextContactOrComplete: nextContactIndex = " + nextContactIndex + ", shouldPulse = " + shouldPulse);
 
         if (nextContactIndex != -1) {
             // Navigate to next contact
-            Log.d("RepCallActivity", "navigateToNextContactOrComplete: Launching next contact at index " + nextContactIndex);
-            launchNextContact(nextContactIndex);
+            Log.d("RepCallActivity", "navigateToNextContactOrComplete: Launching next contact at index " + nextContactIndex + " with shouldPulse = " + shouldPulse);
+            launchNextContact(nextContactIndex, shouldPulse);
         } else {
             // No more contacts, return to issue list
-            Log.d("RepCallActivity", "navigateToNextContactOrComplete: No more contacts, calling returnToIssue()");
-            returnToIssue();
+            Log.d("RepCallActivity", "navigateToNextContactOrComplete: No more contacts, calling returnToIssueInternal with shouldPulse = " + shouldPulse);
+            returnToIssueInternal(shouldPulse);
         }
     }
 
@@ -660,13 +686,14 @@ public class RepCallActivity extends AppCompatActivity {
         return -1;
     }
 
-    private void launchNextContact(int nextContactIndex) {
+    private void launchNextContact(int nextContactIndex, boolean shouldPulse) {
+        Log.d("RepCallActivity", "launchNextContact: Starting next RepCallActivity with shouldPulse = " + shouldPulse);
         Intent intent = new Intent(this, RepCallActivity.class);
         intent.putExtra(KEY_ISSUE, mIssue);
         intent.putExtra(KEY_ACTIVE_CONTACT_INDEX, nextContactIndex);
         intent.putExtra(KEY_ADDRESS, getIntent().getStringExtra(KEY_ADDRESS));
         intent.putExtra(KEY_LOCATION_NAME, getIntent().getStringExtra(KEY_LOCATION_NAME));
-        intent.putExtra("SHOULD_PULSE_COUNTER", true);
+        intent.putExtra("SHOULD_PULSE_COUNTER", shouldPulse);
 
         // Copy over other extras that might be needed
         if (getIntent().hasExtra(IssueActivity.KEY_IS_LOW_ACCURACY)) {
@@ -678,35 +705,30 @@ public class RepCallActivity extends AppCompatActivity {
                     getIntent().getBooleanExtra(IssueActivity.KEY_DONATE_IS_ON, false));
         }
 
-        // Clear the current activity from the stack and start the new one
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(intent);
-        finish();
+        // Use startActivityForResult instead of startActivity so we can forward the result
+        startActivityForResult(intent, 100);
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
 
     private void returnToIssue() {
+        returnToIssueInternal(true); // Pulse when action was taken
+    }
+
+    private void returnToIssueWithoutPulse() {
+        returnToIssueInternal(false); // No pulse when skipping/backing out
+    }
+
+    private void returnToIssueInternal(boolean shouldPulse) {
         if (isFinishing()) {
             return;
         }
 
-        // Launch IssueActivity with pulse flag (same pattern as launchNextContact)
-        Intent intent = new Intent(this, IssueActivity.class);
-        intent.putExtra(IssueActivity.KEY_ISSUE, mIssue);
-        intent.putExtra("SHOULD_PULSE_COUNTER", true);
-        Log.d("RepCallActivity", "returnToIssue: Setting SHOULD_PULSE_COUNTER = true in intent");
+        // Return to existing IssueActivity with result data
+        Intent resultIntent = new Intent();
+        resultIntent.putExtra("SHOULD_PULSE_COUNTER", shouldPulse);
+        Log.d("RepCallActivity", "returnToIssueInternal: Setting SHOULD_PULSE_COUNTER = " + shouldPulse + " in result");
 
-        // Copy important flags
-        if (getIntent().hasExtra(IssueActivity.KEY_IS_LOW_ACCURACY)) {
-            intent.putExtra(IssueActivity.KEY_IS_LOW_ACCURACY,
-                    getIntent().getBooleanExtra(IssueActivity.KEY_IS_LOW_ACCURACY, false));
-        }
-        if (getIntent().hasExtra(IssueActivity.KEY_DONATE_IS_ON)) {
-            intent.putExtra(IssueActivity.KEY_DONATE_IS_ON,
-                    getIntent().getBooleanExtra(IssueActivity.KEY_DONATE_IS_ON, false));
-        }
-
-        startActivity(intent);
+        setResult(RESULT_OK, resultIntent);
         finish();
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }

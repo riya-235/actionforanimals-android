@@ -6,6 +6,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.media.MediaPlayer;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Log;
@@ -27,12 +29,12 @@ import org.a5calls.android.a5calls.R;
 import org.a5calls.android.a5calls.AppSingleton;
 import org.a5calls.android.a5calls.model.AccountManager;
 import org.a5calls.android.a5calls.model.DatabaseHelper;
+import org.a5calls.android.a5calls.model.AchievementManager;
 import org.a5calls.android.a5calls.model.Issue;
 import org.a5calls.android.a5calls.model.Target;
 import org.a5calls.android.a5calls.util.ScriptReplacements;
 import org.a5calls.android.a5calls.view.AnimalsCounterView;
 import org.a5calls.android.a5calls.view.AchievementCelebrationView;
-import org.a5calls.android.a5calls.manager.AchievementManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,10 +44,12 @@ import java.util.List;
  */
 public class EmailComposerActivity extends AppCompatActivity {
     public static final String KEY_LOCATION_NAME = "key_location_name";
-    
+    public static final String KEY_ACTIVE_TARGET_INDEX = "active_target_index";
+
     private Issue mIssue;
     private List<Target> mTargets;
     private boolean mIsBatchEmail;
+    private int mActiveTargetIndex;
 
 
     @Override
@@ -56,6 +60,7 @@ public class EmailComposerActivity extends AppCompatActivity {
         mIssue = getIntent().getParcelableExtra("issue");
         mTargets = getIntent().getParcelableArrayListExtra("targets");
         mIsBatchEmail = getIntent().getBooleanExtra("is_batch_email", false);
+        mActiveTargetIndex = getIntent().getIntExtra(KEY_ACTIVE_TARGET_INDEX, 0);
         
         setupActionBar();
         setupEmailContent();
@@ -91,10 +96,10 @@ public class EmailComposerActivity extends AppCompatActivity {
                 }
             }
         } else {
-            // Individual email - show target info
+            // Individual email - show current target info
             contactIcon.setImageResource(R.drawable.ic_person);
-            if (mTargets != null && !mTargets.isEmpty()) {
-                Target target = mTargets.get(0);
+            if (mTargets != null && !mTargets.isEmpty() && mActiveTargetIndex < mTargets.size()) {
+                Target target = mTargets.get(mActiveTargetIndex);
                 contactName.setText(target.name);
                 if (target.department != null) {
                     contactDetails.setText(target.department);
@@ -126,16 +131,13 @@ public class EmailComposerActivity extends AppCompatActivity {
     }
     
     private void onActionButtonClick(String action) {
-        trackEmailAction(action);
-
-        // Set result to indicate we should pulse the counter on return
-        Intent resultIntent = new Intent();
-        resultIntent.putExtra("SHOULD_PULSE_COUNTER", true);
-        setResult(RESULT_OK, resultIntent);
-
-        Log.d("EmailComposerActivity", "onActionButtonClick: Setting result with SHOULD_PULSE_COUNTER = true");
-
-        finish();
+        if ("sent".equals(action)) {
+            trackEmailAction(action);
+            navigateToNextTargetOrComplete(true); // Pulse for sent action
+        } else {
+            // Skip action
+            navigateToNextTargetOrComplete(false); // No pulse for skip
+        }
     }
     
     // Simple data class for action buttons
@@ -200,9 +202,9 @@ public class EmailComposerActivity extends AppCompatActivity {
             String[] allEmails = getAllTargetEmails();
             emailIntent.putExtra(Intent.EXTRA_EMAIL, allEmails);
         } else {
-            // For individual emails, this would be called per target
-            if (mTargets != null && !mTargets.isEmpty()) {
-                String[] singleEmail = {mTargets.get(0).email};
+            // For individual emails, use the current target
+            if (mTargets != null && !mTargets.isEmpty() && mActiveTargetIndex < mTargets.size()) {
+                String[] singleEmail = {mTargets.get(mActiveTargetIndex).email};
                 emailIntent.putExtra(Intent.EXTRA_EMAIL, singleEmail);
             }
         }
@@ -264,10 +266,11 @@ public class EmailComposerActivity extends AppCompatActivity {
                     contactName = mIssue.corporateInfo != null ? mIssue.corporateInfo.company : "Corporate Target";
                 }
             } else {
-                // For individual emails, use the actual target ID
-                if (mTargets != null && !mTargets.isEmpty()) {
-                    contactId = mTargets.get(0).id != null ? mTargets.get(0).id : mTargets.get(0).name;
-                    contactName = mTargets.get(0).name;
+                // For individual emails, use the current target ID
+                if (mTargets != null && !mTargets.isEmpty() && mActiveTargetIndex < mTargets.size()) {
+                    Target currentTarget = mTargets.get(mActiveTargetIndex);
+                    contactId = currentTarget.id != null ? currentTarget.id : currentTarget.name;
+                    contactName = currentTarget.name;
                 } else {
                     contactId = "email_target";
                     contactName = "Email Target";
@@ -277,7 +280,10 @@ public class EmailComposerActivity extends AppCompatActivity {
             String categories = DatabaseHelper.categoriesToString(mIssue.categories);
             AppSingleton.getInstance(getApplicationContext()).getDatabaseHelper().addCall(
                 mIssue.id, mIssue.name, contactId, contactName, "contact", "email", mIssue.animalsHelpedPerAction, categories, DatabaseHelper.ActionTypes.EMAIL);
-            
+
+            // Check for newly unlocked achievements
+            AchievementManager.getInstance(this).checkAfterAction("email", mIssue.animalsHelpedPerAction, categories);
+
             // Report to the server (same as calls)
             AppSingleton.getInstance(getApplicationContext()).getJsonController().reportCall(
                 mIssue.id, contactId, "contact", "email");
@@ -290,9 +296,26 @@ public class EmailComposerActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        Log.d("EmailComposerActivity", "onResume called");
 
         // Check for pending achievements (like iOS ImpactManager)
         checkPendingAchievements();
+
+        // Check if we should pulse the counter (from previous action)
+        boolean shouldPulse = getIntent().getBooleanExtra("SHOULD_PULSE_COUNTER", false);
+        Log.d("EmailComposerActivity", "onResume: SHOULD_PULSE_COUNTER = " + shouldPulse);
+
+        if (shouldPulse) {
+            // Clear the flag so it doesn't pulse again
+            getIntent().removeExtra("SHOULD_PULSE_COUNTER");
+
+            Log.d("EmailComposerActivity", "onResume: Scheduling pulse animation");
+            // Short delay to ensure menu is ready but feel connected to the action
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                Log.d("EmailComposerActivity", "onResume: Executing pulse animation");
+                animateMenuCounter();
+            }, 300);
+        }
     }
 
     @Override
@@ -423,11 +446,14 @@ public class EmailComposerActivity extends AppCompatActivity {
 
     private void animateMenuCounter() {
         try {
+            Log.d("EmailComposerActivity", "animateMenuCounter: Starting animation");
             // Find the counter view in the menu
             if (getSupportActionBar() != null) {
-                View actionView = findViewById(R.id.action_animals_counter);
+                View actionView = findViewById(R.id.menu_animals_counter);
+                Log.d("EmailComposerActivity", "animateMenuCounter: actionView = " + actionView);
                 if (actionView != null) {
                     TextView counterText = actionView.findViewById(R.id.animals_count);
+                    Log.d("EmailComposerActivity", "animateMenuCounter: counterText = " + counterText);
                     if (counterText != null) {
                         // More prominent pulse animation
                         ObjectAnimator scaleUpX = ObjectAnimator.ofFloat(counterText, "scaleX", 1.0f, 1.5f);
@@ -471,5 +497,89 @@ public class EmailComposerActivity extends AppCompatActivity {
             Log.d("EmailComposerActivity", "Showing pending achievement: " + pending.title);
             AchievementCelebrationView.show(this, pending.title, pending.subtitle, pending.icon);
         }
+    }
+
+    private void navigateToNextTargetOrComplete(boolean shouldPulse) {
+        if (mIsBatchEmail) {
+            // For batch emails, always return to issue after action
+            returnToIssueInternal(shouldPulse);
+            return;
+        }
+
+        // For individual emails, find the next target
+        int nextTargetIndex = findNextTarget();
+        Log.d("EmailComposerActivity", "navigateToNextTargetOrComplete: nextTargetIndex = " + nextTargetIndex + ", shouldPulse = " + shouldPulse);
+
+        if (nextTargetIndex != -1) {
+            // Navigate to next target
+            Log.d("EmailComposerActivity", "navigateToNextTargetOrComplete: Launching next target at index " + nextTargetIndex + " with shouldPulse = " + shouldPulse);
+            launchNextTarget(nextTargetIndex, shouldPulse);
+        } else {
+            // No more targets, return to issue list
+            Log.d("EmailComposerActivity", "navigateToNextTargetOrComplete: No more targets, calling returnToIssueInternal with shouldPulse = " + shouldPulse);
+            returnToIssueInternal(shouldPulse);
+        }
+    }
+
+    private int findNextTarget() {
+        // Simply go to the next target in the list
+        int nextIndex = mActiveTargetIndex + 1;
+        if (nextIndex < mTargets.size()) {
+            return nextIndex;
+        }
+
+        // No more targets after current one
+        return -1;
+    }
+
+    private void launchNextTarget(int nextTargetIndex, boolean shouldPulse) {
+        Log.d("EmailComposerActivity", "launchNextTarget: Starting next EmailComposerActivity with shouldPulse = " + shouldPulse);
+        Intent intent = new Intent(this, EmailComposerActivity.class);
+        intent.putExtra("issue", mIssue);
+        intent.putParcelableArrayListExtra("targets", (ArrayList) mTargets);
+        intent.putExtra("is_batch_email", mIsBatchEmail);
+        intent.putExtra(KEY_ACTIVE_TARGET_INDEX, nextTargetIndex);
+        intent.putExtra("SHOULD_PULSE_COUNTER", shouldPulse);
+        intent.putExtra(KEY_LOCATION_NAME, getIntent().getStringExtra(KEY_LOCATION_NAME));
+
+        // Use startActivityForResult instead of startActivity so we can forward the result
+        startActivityForResult(intent, 100);
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == 100) { // Request code from launchNextTarget
+            Log.d("EmailComposerActivity", "onActivityResult: Got result " + resultCode + " from next EmailComposerActivity");
+
+            // Forward the result from the next activity back to IssueActivity
+            if (data != null) {
+                setResult(resultCode, data);
+                Log.d("EmailComposerActivity", "onActivityResult: Forwarding result " + resultCode + " with data to IssueActivity");
+            } else {
+                setResult(resultCode);
+                Log.d("EmailComposerActivity", "onActivityResult: Forwarding result " + resultCode + " without data to IssueActivity");
+            }
+
+            // Finish this activity so the result propagates
+            finish();
+        }
+    }
+
+    private void returnToIssueInternal(boolean shouldPulse) {
+        if (isFinishing()) {
+            return;
+        }
+
+        // Return to existing IssueActivity with result data
+        Intent resultIntent = new Intent();
+        resultIntent.putExtra("SHOULD_PULSE_COUNTER", shouldPulse);
+        Log.d("EmailComposerActivity", "returnToIssueInternal: Setting SHOULD_PULSE_COUNTER = " + shouldPulse + " in result");
+
+        setResult(RESULT_OK, resultIntent);
+        finish();
+        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 }

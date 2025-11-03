@@ -24,6 +24,8 @@ import org.a5calls.android.a5calls.AppSingleton;
 import org.a5calls.android.a5calls.FiveCallsApplication;
 import org.a5calls.android.a5calls.R;
 import org.a5calls.android.a5calls.model.Achievement;
+import org.a5calls.android.a5calls.model.AchievementManager;
+import org.a5calls.android.a5calls.model.AchievementRegistry;
 import org.a5calls.android.a5calls.model.DatabaseHelper;
 
 public class YourImpactDialogFragment extends DialogFragment {
@@ -135,7 +137,7 @@ public class YourImpactDialogFragment extends DialogFragment {
 
         // Get real streak count from persistent storage
         boolean hasActionThisWeek = db.hasActionThisWeek();
-        int weeklyStreakCount = db.getWeeklyStreak();
+        int weeklyStreakCount = AchievementManager.getInstance(getContext()).getWeeklyStreak();
 
         Set<Integer> actionDays = db.getActionDaysThisWeek();
         int currentDay = db.getCurrentDayOfWeek();
@@ -190,22 +192,24 @@ public class YourImpactDialogFragment extends DialogFragment {
     private void setupAchievements(View view) {
         DatabaseHelper db = AppSingleton.getInstance(getContext()).getDatabaseHelper();
 
+        // Settings achievements are calculated dynamically - no need to check
+
         // Setup Action Achievements (includes settings achievements like iOS)
         setupAchievementSection(view, R.id.action_achievements_container, R.id.action_achievements_count,
             getActionAndSettingsAchievements(db));
 
         // Setup Animal Achievements
         setupAchievementSection(view, R.id.animal_achievements_container, R.id.animal_achievements_count,
-            db.getAchievementsByCategory(Achievement.Category.ANIMAL));
+            AchievementRegistry.getAchievementsByCategory(Achievement.Category.ANIMAL, db, getContext()));
 
         // Setup Milestone Achievements
         setupAchievementSection(view, R.id.milestone_achievements_container, R.id.milestone_achievements_count,
-            db.getAchievementsByCategory(Achievement.Category.MILESTONE));
+            AchievementRegistry.getAchievementsByCategory(Achievement.Category.MILESTONE, db, getContext()));
     }
 
     private List<Achievement> getActionAndSettingsAchievements(DatabaseHelper db) {
-        List<Achievement> actionAchievements = db.getAchievementsByCategory(Achievement.Category.ACTION);
-        List<Achievement> settingsAchievements = db.getAchievementsByCategory(Achievement.Category.SETTINGS);
+        List<Achievement> actionAchievements = AchievementRegistry.getAchievementsByCategory(Achievement.Category.ACTION, db, getContext());
+        List<Achievement> settingsAchievements = AchievementRegistry.getAchievementsByCategory(Achievement.Category.SETTINGS, db, getContext());
 
         // Combine like iOS (action + settings)
         actionAchievements.addAll(settingsAchievements);

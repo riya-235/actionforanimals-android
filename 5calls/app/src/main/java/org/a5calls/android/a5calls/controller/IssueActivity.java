@@ -38,7 +38,7 @@ import org.a5calls.android.a5calls.util.MarkdownUtil;
 import org.a5calls.android.a5calls.util.ContentChangeManager;
 import org.a5calls.android.a5calls.view.ContactListItemView;
 import org.a5calls.android.a5calls.view.AchievementCelebrationView;
-import org.a5calls.android.a5calls.manager.AchievementManager;
+import org.a5calls.android.a5calls.model.AchievementManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -283,7 +283,8 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
         ImageView infoIcon = findViewById(R.id.impact_info_icon);
 
         if (impactText != null) {
-            String text = "Take action, help save " + mIssue.animalsHelpedPerAction + " animals";
+            String animalText = mIssue.animalsHelpedPerAction == 1 ? "animal" : "animals";
+            String text = "Take action, help save " + mIssue.animalsHelpedPerAction + " " + animalText;
             impactText.setText(text);
         }
 
@@ -501,7 +502,8 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
         
         startActivityForResult(intent, 1001); // Request code for RepCallActivity
     }
-    
+
+
     private void launchCorporateCall() {
         // Always start with the first target
         launchCorporateCallForTarget(mIssue.targets.get(0), 0);
@@ -553,9 +555,10 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
             contactsContainer.addView(targetView);
         } else {
             // Show individual targets with individual email buttons
-            for (Target target : mIssue.targets) {
+            for (int i = 0; i < mIssue.targets.size(); i++) {
+                Target target = mIssue.targets.get(i);
                 View targetView = getLayoutInflater().inflate(R.layout.corporate_target_item, contactsContainer, false);
-                setupIndividualTargetView(targetView, target);
+                setupIndividualTargetView(targetView, target, i);
                 contactsContainer.addView(targetView);
             }
         }
@@ -611,7 +614,7 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
         });
     }
     
-    private void setupIndividualTargetView(View targetView, Target target) {
+    private void setupIndividualTargetView(View targetView, Target target, int targetIndex) {
         // For individual email, show target info and make entire card clickable
         ImageView icon = targetView.findViewById(R.id.target_icon);
         ImageView checkmark = targetView.findViewById(R.id.target_checkmark);
@@ -646,16 +649,12 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
                 // Email campaign - launch email composer for this specific target
                 Intent intent = new Intent(this, EmailComposerActivity.class);
                 intent.putExtra("issue", mIssue);
-                ArrayList<Target> singleTarget = new ArrayList<>();
-                singleTarget.add(target);
-                intent.putParcelableArrayListExtra("targets", singleTarget);
+                intent.putParcelableArrayListExtra("targets", (ArrayList) mIssue.targets);
                 intent.putExtra("is_batch_email", false);
-                
-                // Pass location for script replacements (same as RepCallActivity)
-                intent.putExtra(EmailComposerActivity.KEY_LOCATION_NAME, 
+                intent.putExtra(EmailComposerActivity.KEY_ACTIVE_TARGET_INDEX, targetIndex);
+                intent.putExtra(EmailComposerActivity.KEY_LOCATION_NAME,
                                getIntent().getStringExtra(RepCallActivity.KEY_LOCATION_NAME));
-                
-                startActivityForResult(intent, 1001); // Request code for RepCallActivity
+                startActivityForResult(intent, 1001);
             } else if (callEnabled) {
                 // Call campaign - launch corporate call for this specific target
                 launchCorporateCallForTarget(target);
@@ -1081,10 +1080,13 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
      * Check for pending achievements and show celebration dialog (like iOS ImpactManager)
      */
     private void checkPendingAchievements() {
-        AchievementManager.PendingAchievement pending = AchievementManager.getInstance().getPendingAchievement();
-        if (pending != null) {
-            Log.d("IssueActivity", "Showing pending achievement: " + pending.title);
-            AchievementCelebrationView.show(this, pending.title, pending.subtitle, pending.icon);
+        AchievementManager achievementManager = AchievementManager.getInstance(this);
+        if (achievementManager != null) {
+            AchievementManager.PendingAchievement pending = achievementManager.getPendingAchievement();
+            if (pending != null) {
+                Log.d("IssueActivity", "Showing pending achievement: " + pending.title);
+                AchievementCelebrationView.show(this, pending.title, pending.subtitle, pending.icon);
+            }
         }
     }
 }

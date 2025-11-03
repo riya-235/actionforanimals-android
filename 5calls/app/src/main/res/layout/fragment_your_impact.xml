@@ -76,7 +76,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:src="@drawable/sanctuary"
-                    android:scaleType="centerCrop"
+                    android:scaleType="centerInside"
                     android:contentDescription="Sanctuary background" />
 
                 <!-- Text overlay positioned in upper area -->
@@ -91,7 +91,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Animals Helped"
-                        android:textSize="20sp"
+                        android:textSize="22sp"
                         android:textStyle="bold"
                         android:textColor="@android:color/white"
                         android:shadowColor="#80000000"
@@ -100,32 +100,42 @@
                         android:shadowRadius="2"
                         android:layout_marginBottom="8dp" />
 
-                    <TextView
-                        android:id="@+id/animals_helped_text"
+                    <!-- VStack with negative padding to move number and message closer -->
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="0"
-                        android:textSize="56sp"
-                        android:textStyle="bold"
-                        android:textColor="@android:color/white"
-                        android:shadowColor="#80000000"
-                        android:shadowDx="0"
-                        android:shadowDy="2"
-                        android:shadowRadius="3" />
+                        android:orientation="vertical"
+                        android:gravity="center_horizontal"
+                        android:layout_marginTop="-15dp">
 
-                    <TextView
-                        android:id="@+id/impact_message_text"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Ready to make your first impact?"
-                        android:textSize="14sp"
-                        android:textColor="@android:color/white"
-                        android:shadowColor="#80000000"
-                        android:shadowDx="0"
-                        android:shadowDy="1"
-                        android:shadowRadius="2"
-                        android:gravity="center"
-                        android:layout_marginTop="-5dp" />
+                        <TextView
+                            android:id="@+id/animals_helped_text"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textSize="56sp"
+                            android:textStyle="bold"
+                            android:textColor="@android:color/white"
+                            android:shadowColor="#80000000"
+                            android:shadowDx="0"
+                            android:shadowDy="2"
+                            android:shadowRadius="3" />
+
+                        <TextView
+                            android:id="@+id/impact_message_text"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Ready to make your first impact?"
+                            android:textSize="14sp"
+                            android:textColor="@android:color/white"
+                            android:shadowColor="#80000000"
+                            android:shadowDx="0"
+                            android:shadowDy="1"
+                            android:shadowRadius="2"
+                            android:gravity="center"
+                            android:layout_marginTop="-5dp" />
+
+                    </LinearLayout>
 
                 </LinearLayout>
 
