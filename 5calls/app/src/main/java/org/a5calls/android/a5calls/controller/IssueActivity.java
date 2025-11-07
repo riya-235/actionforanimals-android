@@ -786,7 +786,7 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
 
     private boolean hasContactBeenCalled(Contact contact) {
         DatabaseHelper dbHelper = AppSingleton.getInstance(this).getDatabaseHelper();
-        return dbHelper.hasCalledToday(mIssue.id, contact.id);
+        return dbHelper.hasContacted(mIssue.id, contact.id);
     }
     
     private boolean hasBatchTargetBeenCompleted() {
@@ -806,7 +806,7 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
         }
         
         DatabaseHelper dbHelper = AppSingleton.getInstance(this).getDatabaseHelper();
-        return dbHelper.hasCalledToday(mIssue.id, contactId);
+        return dbHelper.hasContacted(mIssue.id, contactId);
     }
     
     private boolean hasIndividualTargetBeenCompleted(Target target) {
@@ -819,7 +819,7 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
         }
         
         DatabaseHelper dbHelper = AppSingleton.getInstance(this).getDatabaseHelper();
-        return dbHelper.hasCalledToday(mIssue.id, contactId);
+        return dbHelper.hasContacted(mIssue.id, contactId);
     }
 
     private void launchContactDetailForContact(Contact contact, int contactIndex) {
@@ -1084,7 +1084,6 @@ public class IssueActivity extends AppCompatActivity implements FiveCallsApi.Con
         if (achievementManager != null) {
             AchievementManager.PendingAchievement pending = achievementManager.getPendingAchievement();
             if (pending != null) {
-                Log.d("IssueActivity", "Showing pending achievement: " + pending.title);
                 AchievementCelebrationView.show(this, pending.title, pending.subtitle, pending.icon);
             }
         }

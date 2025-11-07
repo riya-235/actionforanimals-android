@@ -51,9 +51,9 @@ public class FiveCallsApi {
     // request on the server. This will only work on debug builds.
     protected static final boolean TESTING = true;
 
-    private static final String GET_ISSUES_REQUEST = "https://getissues-2xumh6zxaa-uc.a.run.app";
+    private static final String GET_ISSUES_REQUEST = "https://getissues-wv7gpk3bya-uc.a.run.app";
 
-    private static final String GET_REPORT = "https://reportcall-2xumh6zxaa-uc.a.run.app";
+    private static final String GET_REPORT = "https://reportcall-wv7gpk3bya-uc.a.run.app";
 
     // private static final String NEWSLETTER_SUBSCRIBE = "https://buttondown.com/api/emails/embed-subscribe/5calls";
     private static final String NEWSLETTER_SUBSCRIBE = "";

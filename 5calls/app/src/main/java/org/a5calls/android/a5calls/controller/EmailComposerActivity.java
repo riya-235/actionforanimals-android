@@ -494,7 +494,6 @@ public class EmailComposerActivity extends AppCompatActivity {
     private void checkPendingAchievements() {
         AchievementManager.PendingAchievement pending = AchievementManager.getInstance().getPendingAchievement();
         if (pending != null) {
-            Log.d("EmailComposerActivity", "Showing pending achievement: " + pending.title);
             AchievementCelebrationView.show(this, pending.title, pending.subtitle, pending.icon);
         }
     }

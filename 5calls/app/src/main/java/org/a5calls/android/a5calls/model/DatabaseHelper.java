@@ -294,6 +294,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 CallsColumns.CONTACT_ID + " = ?", new String[] {issueId, contactId});
         boolean result = c.getCount() > 0;
         c.close();
+
         return result;
     }
 
@@ -318,22 +319,17 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     /**
-     * Whether a call has been made "today" (local time) for a particular issue and contact.
+     * Whether a call has been made for a particular issue and contact (iOS-style persistent behavior).
      * @param issueId
      * @param contactId
      * @return True if so, false otherwise.
      */
-    public boolean hasCalledToday(String issueId, String contactId) {
+    public boolean hasContacted(String issueId, String contactId) {
         contactId = sanitizeContactId(contactId);
-        Calendar rightNow = mTimeProvider.getCalendar();
-        rightNow.set(Calendar.HOUR_OF_DAY, 0);
-        rightNow.set(Calendar.MINUTE, 0);
-        rightNow.set(Calendar.SECOND, 0);
-        String[] selectionArgs = new String[] {issueId, contactId, "" + rightNow.getTimeInMillis()};
+        String[] selectionArgs = new String[] {issueId, contactId};
         Cursor c = getReadableDatabase().rawQuery("SELECT " + CallsColumns.TIMESTAMP + " FROM " +
                         CALLS_TABLE_NAME + " WHERE " + CallsColumns.ISSUE_ID + " = ? AND " +
-                        CallsColumns.CONTACT_ID + " = ? AND " + CallsColumns.TIMESTAMP +
-                        " >= ? GROUP BY " + CallsColumns.RESULT, selectionArgs);
+                        CallsColumns.CONTACT_ID + " = ? GROUP BY " + CallsColumns.RESULT, selectionArgs);
         boolean result = c.getCount() > 0;
         c.close();
         return result;

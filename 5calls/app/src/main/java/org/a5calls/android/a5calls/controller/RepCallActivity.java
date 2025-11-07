@@ -220,15 +220,11 @@ public class RepCallActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == 100) { // Request code from launchNextContact
-            Log.d("RepCallActivity", "onActivityResult: Got result " + resultCode + " from next RepCallActivity");
-
             // Forward the result from the next activity back to IssueActivity
             if (data != null) {
                 setResult(resultCode, data);
-                Log.d("RepCallActivity", "onActivityResult: Forwarding result " + resultCode + " with data to IssueActivity");
             } else {
                 setResult(resultCode);
-                Log.d("RepCallActivity", "onActivityResult: Forwarding result " + resultCode + " without data to IssueActivity");
             }
 
             // Finish this activity so the result propagates
@@ -263,9 +259,7 @@ public class RepCallActivity extends AppCompatActivity {
     }
 
     private void triggerAnimalsCounterIncrement() {
-        Log.d("RepCallActivity", "triggerAnimalsCounterIncrement called");
         runOnUiThread(() -> {
-            Log.d("RepCallActivity", "Triggering counter feedback directly");
 
             // Trigger haptic feedback
             triggerHapticFeedback();
@@ -292,10 +286,9 @@ public class RepCallActivity extends AppCompatActivity {
                 } else {
                     vibrator.vibrate(50);
                 }
-                Log.d("RepCallActivity", "Haptic feedback triggered");
             }
         } catch (Exception e) {
-            Log.e("RepCallActivity", "Error triggering haptic feedback", e);
+            // Silently handle haptic feedback errors
         }
     }
 
@@ -308,7 +301,7 @@ public class RepCallActivity extends AppCompatActivity {
             try {
                 mediaPlayer = MediaPlayer.create(this, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI);
             } catch (Exception e) {
-                Log.d("RepCallActivity", "Default notification URI failed: " + e.getMessage());
+                // Try fallback sound
             }
 
             // Fallback to ringtone sound if notification failed
@@ -316,7 +309,7 @@ public class RepCallActivity extends AppCompatActivity {
                 try {
                     mediaPlayer = MediaPlayer.create(this, android.provider.Settings.System.DEFAULT_RINGTONE_URI);
                 } catch (Exception e) {
-                    Log.d("RepCallActivity", "Default ringtone URI failed: " + e.getMessage());
+                    // No fallback available
                 }
             }
 
@@ -325,17 +318,15 @@ public class RepCallActivity extends AppCompatActivity {
                     mp.release();
                 });
                 mediaPlayer.setOnErrorListener((mp, what, extra) -> {
-                    Log.e("RepCallActivity", "MediaPlayer error: " + what + ", " + extra);
                     mp.release();
                     return true; // Handle error
                 });
                 mediaPlayer.start();
-                Log.d("RepCallActivity", "Success sound played");
             } else {
-                Log.w("RepCallActivity", "No system sounds available, skipping sound");
+                // No system sounds available
             }
         } catch (Exception e) {
-            Log.e("RepCallActivity", "Error playing success sound", e);
+            // Silently handle sound errors
         }
     }
 
@@ -370,13 +361,11 @@ public class RepCallActivity extends AppCompatActivity {
                         AnimatorSet pulseAnimation = new AnimatorSet();
                         pulseAnimation.playSequentially(scaleUp, scaleDown);
                         pulseAnimation.start();
-
-                        Log.d("RepCallActivity", "Menu counter animation triggered");
                     }
                 }
             }
         } catch (Exception e) {
-            Log.e("RepCallActivity", "Error animating menu counter", e);
+            // Silently handle animation errors
         }
     }
 
@@ -397,7 +386,7 @@ public class RepCallActivity extends AppCompatActivity {
                 animalsCountTextView.setText(String.valueOf(totalAnimalsHelped));
             }
         } catch (Exception e) {
-            Log.e("RepCallActivity", "Error updating animals counter", e);
+            // Silently handle counter update errors
         }
     }
 
@@ -641,7 +630,6 @@ public class RepCallActivity extends AppCompatActivity {
 
 
     private void reportCall(Outcome outcome, String address) {
-        Log.d("RepCallActivity", "reportCall: Taking action with outcome: " + outcome.status);
 
         // Trigger immediate feedback (pulse, haptic, sound) before server call
         triggerAnimalsCounterIncrement();
@@ -662,15 +650,12 @@ public class RepCallActivity extends AppCompatActivity {
     private void navigateToNextContactOrComplete(boolean shouldPulse) {
         // Find the next contact in the list
         int nextContactIndex = findNextContact();
-        Log.d("RepCallActivity", "navigateToNextContactOrComplete: nextContactIndex = " + nextContactIndex + ", shouldPulse = " + shouldPulse);
 
         if (nextContactIndex != -1) {
             // Navigate to next contact
-            Log.d("RepCallActivity", "navigateToNextContactOrComplete: Launching next contact at index " + nextContactIndex + " with shouldPulse = " + shouldPulse);
             launchNextContact(nextContactIndex, shouldPulse);
         } else {
             // No more contacts, return to issue list
-            Log.d("RepCallActivity", "navigateToNextContactOrComplete: No more contacts, calling returnToIssueInternal with shouldPulse = " + shouldPulse);
             returnToIssueInternal(shouldPulse);
         }
     }
@@ -687,7 +672,6 @@ public class RepCallActivity extends AppCompatActivity {
     }
 
     private void launchNextContact(int nextContactIndex, boolean shouldPulse) {
-        Log.d("RepCallActivity", "launchNextContact: Starting next RepCallActivity with shouldPulse = " + shouldPulse);
         Intent intent = new Intent(this, RepCallActivity.class);
         intent.putExtra(KEY_ISSUE, mIssue);
         intent.putExtra(KEY_ACTIVE_CONTACT_INDEX, nextContactIndex);
@@ -726,7 +710,6 @@ public class RepCallActivity extends AppCompatActivity {
         // Return to existing IssueActivity with result data
         Intent resultIntent = new Intent();
         resultIntent.putExtra("SHOULD_PULSE_COUNTER", shouldPulse);
-        Log.d("RepCallActivity", "returnToIssueInternal: Setting SHOULD_PULSE_COUNTER = " + shouldPulse + " in result");
 
         setResult(RESULT_OK, resultIntent);
         finish();
@@ -760,7 +743,6 @@ public class RepCallActivity extends AppCompatActivity {
     private void checkPendingAchievements() {
         AchievementManager.PendingAchievement pending = AchievementManager.getInstance().getPendingAchievement();
         if (pending != null) {
-            Log.d("RepCallActivity", "Showing pending achievement: " + pending.title);
             AchievementCelebrationView.show(this, pending.title, pending.subtitle, pending.icon);
         }
     }

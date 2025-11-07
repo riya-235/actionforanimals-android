@@ -49,7 +49,6 @@ public class AchievementCelebrationView extends FrameLayout {
         // Auto-dismiss after 4.5 seconds like iOS
         Handler handler = new Handler(Looper.getMainLooper());
         handler.postDelayed(() -> {
-            Log.d(TAG, "Achievement celebration auto-dismissing after timeout");
             dismiss();
         }, 4500);
     }
@@ -70,7 +69,6 @@ public class AchievementCelebrationView extends FrameLayout {
         ViewGroup rootView = activity.findViewById(android.R.id.content);
         if (rootView != null) {
             rootView.addView(celebrationView);
-            Log.d(TAG, "Achievement celebration added to activity");
         }
     }
 
@@ -186,12 +184,10 @@ public class AchievementCelebrationView extends FrameLayout {
                     return true;
                 });
                 mediaPlayer.start();
-                Log.d(TAG, "Achievement celebration sound played");
             } else {
                 Log.w(TAG, "No system sounds available for achievement");
             }
         } catch (Exception e) {
-            Log.e(TAG, "Error playing achievement sound", e);
         }
     }
 
@@ -210,13 +206,11 @@ public class AchievementCelebrationView extends FrameLayout {
             }
         });
         fadeOut.start();
-        Log.d(TAG, "Achievement celebration fading out slowly");
     }
 
     private void removeFromParent() {
         if (getParent() != null && getParent() instanceof ViewGroup) {
             ((ViewGroup) getParent()).removeView(this);
-            Log.d(TAG, "Achievement celebration removed from activity");
         }
     }
 
@@ -225,13 +219,11 @@ public class AchievementCelebrationView extends FrameLayout {
             if (achievementMediaPlayer != null) {
                 if (achievementMediaPlayer.isPlaying()) {
                     achievementMediaPlayer.stop();
-                    Log.d(TAG, "Achievement sound stopped on dismiss");
                 }
                 achievementMediaPlayer.release();
                 achievementMediaPlayer = null;
             }
         } catch (Exception e) {
-            Log.e(TAG, "Error stopping achievement sound", e);
         }
     }
 }

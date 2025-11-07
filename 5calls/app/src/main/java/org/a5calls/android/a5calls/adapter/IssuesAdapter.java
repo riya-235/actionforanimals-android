@@ -499,7 +499,7 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         // Calls today only.
         int callsLeft = issue.contacts.size();
         for (Contact contact : issue.contacts) {
-            if(dbHelper.hasCalledToday(issue.id, contact.id)) {
+            if(dbHelper.hasContacted(issue.id, contact.id)) {
                 callsLeft--;
             }
         }
@@ -619,7 +619,7 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         
         DatabaseHelper dbHelper = AppSingleton.getInstance(mActivity).getDatabaseHelper();
         for (Contact contact : issue.contacts) {
-            if (!dbHelper.hasCalledToday(issue.id, contact.id)) {
+            if (!dbHelper.hasContacted(issue.id, contact.id)) {
                 return false; // At least one contact hasn't been called
             }
         }
@@ -657,7 +657,7 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                 return false;
             }
             
-            return dbHelper.hasCalledToday(issue.id, contactId);
+            return dbHelper.hasContacted(issue.id, contactId);
         } else {
             // For individual emails, check if all targets have been contacted
             if (issue.targets == null || issue.targets.isEmpty()) {
@@ -671,7 +671,7 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                     android.util.Log.w("IssuesAdapter", "Target in corporate campaign " + issue.id + " has no ID or name");
                     return false;
                 }
-                if (!dbHelper.hasCalledToday(issue.id, contactId)) {
+                if (!dbHelper.hasContacted(issue.id, contactId)) {
                     return false; // At least one target hasn't been contacted
                 }
             }
@@ -741,7 +741,7 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                 String contactId = target.id != null ? target.id : target.name;
                 if (contactId != null) {
                     DatabaseHelper dbHelper = AppSingleton.getInstance(mActivity).getDatabaseHelper();
-                    hasBeenCompleted = dbHelper.hasCalledToday(issue.id, contactId);
+                    hasBeenCompleted = dbHelper.hasContacted(issue.id, contactId);
                 }
             }
             
@@ -808,7 +808,7 @@ public class IssuesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             
             // Check if user has called this representative today
             DatabaseHelper dbHelper = AppSingleton.getInstance(mActivity).getDatabaseHelper();
-            boolean hasCalledToday = dbHelper.hasCalledToday(issue.id, contact.id);
+            boolean hasCalledToday = dbHelper.hasContacted(issue.id, contact.id);
             
             if (hasCalledToday) {
                 // Show green checkmark instead of photo
